@@ -16,7 +16,7 @@ module CHIP #(                                                                  
         output              o_DMEM_wen,                                                         //
         output [BIT_W-1:0]  o_DMEM_addr,                                                        //
         output [BIT_W-1:0]  o_DMEM_wdata,                                                       //
-    // finnish procedure                                                                        //
+    // finish procedure                                                                        //
         output              o_finish,                                                           //
     // cache                                                                                    //
         input               i_cache_finish,                                                     //
