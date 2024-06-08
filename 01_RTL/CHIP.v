@@ -16,7 +16,7 @@ module CHIP #(                                                                  
         output              o_DMEM_wen,                                                         //
         output [BIT_W-1:0]  o_DMEM_addr,                                                        //
         output [BIT_W-1:0]  o_DMEM_wdata,                                                       //
-    // finish procedure                                                                        //
+    // finish procedure                                                                         //
         output              o_finish,                                                           //
     // cache                                                                                    //
         input               i_cache_finish,                                                     //
@@ -29,23 +29,28 @@ module CHIP #(                                                                  
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
 
     // TODO: any declaration
+    
 
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
 // Wires and Registers
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
     
     // TODO: any declaration
-        reg [BIT_W-1:0] PC, next_PC;
-        reg write_enable;
+        reg [BIT_W-1:0] PC, next_PC; // PC memory
+        
+        reg write_enable; //registers
         reg [4:0] register_source_1, register_source_2, register_destination;
         reg [BIT_W-1; 0] write_data, read_data_1, read_data_2;
 
-        wire mem_cen, mem_wen;
-        wire [BIT_W-1:0] mem_addr, mem_wdata, mem_rdata;
-        wire mem_stall;
-        wire wen;
+        wire wen; //registers
         wire [4:0] rs1, rs2, rd;
         wire rdata1, rdata2;
+
+        wire mem_cen, mem_wen; //cache/data memory
+        wire [BIT_W-1:0] mem_addr, mem_wdata, mem_rdata;
+        wire mem_stall;
+        
+        
 
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
 // Continuous Assignment
@@ -77,6 +82,17 @@ module CHIP #(                                                                  
         .rdata1 (rdata1),           
         .rdata2 (rdata2)
     );
+
+    MULDIV_unit md0(
+        .i_clk   (i_clk),
+        .i_rst_n (i_rst_n),
+        .i_valid (),
+        .i_A     (rdata1),
+        .i_B     (rdata2),
+        .i_inst   (),
+        .o_data   (),
+        .o_done   (),
+    )
 
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
 // Always Blocks
@@ -140,6 +156,16 @@ endmodule
 
 module MULDIV_unit(
     // TODO: port declaration
+        input                       i_clk,   // clock
+        input                       i_rst_n, // reset
+
+        input                       i_valid, // input valid signal
+        input [DATA_W - 1 : 0]      i_A,     // input operand A
+        input [DATA_W - 1 : 0]      i_B,     // input operand B
+        input [         2 : 0]      i_inst,  // instruction
+
+        output [2*DATA_W - 1 : 0]   o_data,  // output value
+        output                      o_done   // output valid signal
     );
     // Todo: HW2
 endmodule
