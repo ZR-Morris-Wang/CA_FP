@@ -99,24 +99,34 @@ module CHIP #(                                                                  
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
     
     // TODO: any declaration
-        reg [BIT_W-1:0] PC, next_PC; // PC memory
+        
+        // PC memory
+        reg [BIT_W-1: 0] PC, next_PC; 
         
         //Reg_file
-        reg write_enable; //I
         reg [4:0] register_source_1, register_source_2, register_destination; //I
-        reg [BIT_W-1; 0] write_data; //I
-        reg [BIT_W-1; 0] read_data_1, read_data_2; //O
+        reg [BIT_W-1: 0] write_data; //I
+        reg [BIT_W-1: 0] read_data_1, read_data_2; //O
 
-        wire wen;
         wire [4:0] rs1, rs2, rd;
-        wire [BIT_W-1; 0] wdata;
-        wire [BIT_W-1; 0] rdata1, rdata2;
+        wire [BIT_W-1: 0] wdata;
+        wire [BIT_W-1: 0] rdata1, rdata2;
 
-        wire mem_cen, mem_wen; //cache/data memory
-        wire [BIT_W-1:0] mem_addr, mem_wdata, mem_rdata;
-        wire mem_stall;
+        //controller
+        reg [6:0] opc; //I
+        reg [2:0] func3;
+        reg [6:0] func7;
+
+        wire [6:0] opc_w;
+        wire [2:0] func3_w;
+        wire [6:0] func7_w;
+
+        wire Branch, MemRnW, MemtoReg, MemWrite, ALUSrc, RegWrite; //O
+        wire [2:0] ALUOp; 
         
-        
+        //ALU/MULDIV
+        reg [BIT_W - 1:0] i_Breg;
+        wire [BIT_W - 1:0] i_A_wire, i_B_wire;
 
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
 // Continuous Assignment
@@ -125,16 +135,25 @@ module CHIP #(                                                                  
     // TODO: any wire assignment
 
     // Assign wires to F/Fs
-        assign wen = write_enable; //1b I
-
-        assign rs1 = register_source_1; //4b I
+        
+        //Reg_file
+        assign rs1 = register_source_1; 
         assign rs2 = register_source_2;
         assign rd = register_destination;
+        assign wdata = write_data;
 
-        assign wdata = write_data; //32b I
+        //controller
+        assign opc_w = opc;
+        assign func3_w = func3;
+        assign func7_w = func7;
 
-        // assign rdata1 = read_data_1; //32b O
-        // assign rdata2 = read_data_2;
+        //ALU/MULDIV
+        assign i_A_wire = read_data_1;
+        assign i_B_wire = i_Breg;
+
+        //To o/p
+        assign o_DMEM_cen = MemRnW;
+        assign o_DMEM_wen = MemWrite;
     
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
 // Submoddules
@@ -144,7 +163,7 @@ module CHIP #(                                                                  
     Reg_file reg0(               
         .i_clk  (i_clk),
         .i_rst_n(i_rst_n),
-        .wen    (wen),
+        .wen    (RegWrite),
         .rs1    (rs1),
         .rs2    (rs2),
         .rd     (rd),
@@ -152,17 +171,38 @@ module CHIP #(                                                                  
         .rdata1 (rdata1),
         .rdata2 (rdata2)
     );
-
+    ALU alu0(
+        .i_clk   (i_clk),
+        .i_rst_n (i_rst_n),
+        .i_valid (),
+        .i_A     (i_A_wire),
+        .i_B     (i_B_wire),
+        .i_inst  (ALUOp),
+        .o_data  (o_DMEM_addr),
+        .o_done  (),
+    );
     MULDIV_unit md0(
         .i_clk   (i_clk),
         .i_rst_n (i_rst_n),
         .i_valid (),
-        .i_A     (rdata1),
-        .i_B     (rdata2),
-        .i_inst   (),
-        .o_data   (),
-        .o_done   (),
+        .i_A     (i_A_wire),
+        .i_B     (i_B_wire),
+        .i_inst  (i_inst_wire),
+        .o_data  (o_DMEM_addr),
+        .o_done  (),
     );
+    ControlUnit cu0(
+        .opcode  (opc_w),
+        .func3   (func3_w),
+        .func7   (func7_w),
+        .Branch  (Branch),
+        .MemRnW  (MemRnW),
+        .MemtoReg(MemtoReg)
+        .ALUOp   (ALUOp)
+        .MemWrite(MemWrite),
+        .ALUSrc  (ALUSrc),
+        .RegWrite(RegWrite)
+    )
 
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
 // Always Blocks
@@ -240,6 +280,7 @@ module ALU (
     output                      o_done   // output valid signal
 
 );
+    assign i_valid = 1;
     always @(posedge i_clk or negedge i_rst_n) begin
         if(i_valid && !i_rst_n) begin
             case (ALUOp)
@@ -289,7 +330,7 @@ module ControlUnit(
     input[2:0]      func3,
     input[6:0]      func7,
     output          Branch,
-    output          MemRead,
+    output          MemRnW,
     output          MemtoReg,
     output[2:0]     ALUOp,
     output          MemWrite,
@@ -302,7 +343,7 @@ module ControlUnit(
             // R-type instructions
             7'b0110011: begin
                 Branch = 0;
-                MemRead = 0;
+                MemRnW = 0;
                 MemtoReg = 0;
                 case (func3)
                     3'b000: begin
@@ -331,7 +372,7 @@ module ControlUnit(
             // Load instructions
             7'b0000011: begin
                 Branch = 0;
-                MemRead = 1;
+                MemRnW = 1;
                 MemtoReg = 1;
                 ALUOp = 4'b0000;
                 MemWrite = 0;
@@ -342,7 +383,7 @@ module ControlUnit(
             // Store instructions
             7'b0100011: begin
                 Branch = 0;
-                MemRead = 0;
+                MemRnW = 0;
                 MemtoReg = 0;
                 ALUOp = 4'b0000;
                 MemWrite = 1;
@@ -353,7 +394,7 @@ module ControlUnit(
             // Branch instructions
             7'b1100011: begin
                 Branch = 1;
-                MemRead = 0;
+                MemRnW = 0;
                 MemtoReg = 0;
                 ALUOp = 4'b1111;
                 MemWrite = 0;
@@ -364,7 +405,7 @@ module ControlUnit(
             // Immediate instructions
             7'b0010011: begin
                 Branch = 0;
-                MemRead = 0;
+                MemRnW = 0;
                 MemtoReg = 0;
                 case (func3)
                     3'b000: ALUOp = 4'b0000; // addi
@@ -381,7 +422,7 @@ module ControlUnit(
             // Jump instructions
             7'b1101111: begin
                 Branch = 0;
-                MemRead = 0;
+                MemRnW = 0;
                 MemtoReg = 0;
                 ALUOp = 4'b0000;
                 MemWrite = 0;
@@ -392,7 +433,7 @@ module ControlUnit(
             // Ecall instruction
             7'b1110011: begin
                 Branch = 0;
-                MemRead = 0;
+                MemRnW = 0;
                 MemtoReg = 0;
                 ALUOp = 4'b0000;
                 MemWrite = 0;
@@ -402,7 +443,7 @@ module ControlUnit(
 
             default: begin
                 Branch = 0;
-                MemRead = 0;
+                MemRnW = 0;
                 MemtoReg = 0;
                 ALUOp = 4'b0000;
                 MemWrite = 0;
