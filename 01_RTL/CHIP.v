@@ -128,6 +128,8 @@ module CHIP #(                                                                  
         reg [BIT_W - 1:0] i_Breg;
         wire [BIT_W - 1:0] i_A_wire, i_B_wire;
 
+        //state
+        reg state;
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
 // Continuous Assignment
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -136,6 +138,9 @@ module CHIP #(                                                                  
 
     // Assign wires to F/Fs
         
+        //State
+        assign o_IMEM_cen = state;
+
         //Reg_file
         assign rs1 = register_source_1; 
         assign rs2 = register_source_2;
@@ -202,13 +207,82 @@ module CHIP #(                                                                  
         .MemWrite(MemWrite),
         .ALUSrc  (ALUSrc),
         .RegWrite(RegWrite)
-    )
+    );
 
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
 // Always Blocks
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
     
     // Todo: any combinational/sequential circuit
+    always @(*) begin
+        state = 1'b1;
+        next_PC = i_IMEM_data;
+    end
+
+    always @(*) begin //update rs1, rs2, rd
+        case (next_PC[6:0])
+            
+            7'b0110011: begin //R-type
+                register_source_1 = next_PC[19:15];
+                register_source_2 = next_PC[24:20];
+                register_destination = next_PC[11:7];
+            end
+            
+            7'1100111: begin //I-type (jalr)
+                register_source_1 = next_PC[19:15];
+                register_source_2 = 0;
+                register_destination = next_PC[11:7];
+            end
+
+            7'0010011: begin //I-type (addi...)
+                register_source_1 = next_PC[19:15];
+                register_source_2 = 0;
+                register_destination = next_PC[11:7];
+            end
+
+            7'0000011: begin //I-type (lw)
+                register_source_1 = next_PC[19:15];
+                register_source_2 = 0;
+                register_destination = next_PC[11:7];
+            end
+
+            7'1110011: begin //I-type (Ecall)
+                register_source_1 = next_PC[19:15];
+                register_source_2 = 0;
+                register_destination = next_PC[11:7];
+            end
+
+            7'0100011: begin //S-type
+                register_source_1 = next_PC[19:15];
+                register_source_2 = next_PC[24:20];
+                register_destination = 0;
+            end
+
+            7'1100011: begin //SB-type
+                register_source_1 = next_PC[19:15];
+                register_source_2 = next_PC[24:20];
+                register_destination = 0;
+            end
+
+            7'0010111: begin //U-type
+                register_source_1 = 0;
+                register_source_2 = 0;
+                register_destination = next_PC[11:7];
+            end
+
+            7'1101111: begin //UJ-type
+                register_source_1 = 0;
+                register_source_2 = 0;
+                register_destination = next_PC[11:7];
+            end
+
+            default: begin
+                register_source_1 = register_source_1;
+                register_source_2 = register_source_2;
+                register_destination = register_destination;
+            end
+        endcase
+    end
 
     always @(posedge i_clk or negedge i_rst_n) begin
         if (!i_rst_n) begin
@@ -335,7 +409,7 @@ module ControlUnit(
     output[2:0]     ALUOp,
     output          MemWrite,
     output          ALUSrc,
-    output          RegWrite
+    output          RegWrite,
 );
 
     always @(*) begin
