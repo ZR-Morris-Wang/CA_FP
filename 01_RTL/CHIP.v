@@ -179,6 +179,13 @@ module CHIP #(                                                                  
     end
 endmodule
 
+
+
+
+
+
+
+
 module Reg_file(i_clk, i_rst_n, wen, rs1, rs2, rd, wdata, rdata1, rdata2);
    
     parameter BITS = 32;
@@ -223,20 +230,127 @@ module Reg_file(i_clk, i_rst_n, wen, rs1, rs2, rd, wdata, rdata1, rdata2);
     end
 endmodule
 
-module MULDIV_unit(
-    // TODO: port declaration
-        input                       i_clk,   // clock
-        input                       i_rst_n, // reset
+module ControlUnit(
+    input[6:0]      opcode,
+    input[2:0]      func3,
+    input[6:0]      func7,
+    output          Branch,
+    output          MemRead,
+    output          MemtoReg,
+    output[2:0]     ALUOp,
+    output          MemWrite,
+    output          ALUSrc,
+    output          RegWrite
+);
 
-        input                       i_valid, // input valid signal
-        input [DATA_W - 1 : 0]      i_A,     // input operand A
-        input [DATA_W - 1 : 0]      i_B,     // input operand B
-        input [         2 : 0]      i_inst,  // instruction
+    always @(*) begin
+        case (opcode)
+            // R-type instructions
+            7'b0110011: begin
+                Branch = 0;
+                MemRead = 0;
+                MemtoReg = 0;
+                case (func3)
+                    3'b000: begin
+                        case (fun7)
+                            7'b0000000: ALUOp = 3'b000; // add
+                            7'b0100000: ALUOp = 3'b001; // sub
+                            7'b0000001: ALUOp = 3'b111; // mul
+                            default: ALUOp = 3'b000;
+                        endcase
+                    end
+                    3'b111: ALUOp = 3'b010; // and
+                    3'b100: ALUOp = 3'b011; // xor
+                    default: ALUOp = 3'b000;
+                endcase
+                MemWrite = 0;
+                ALUSrc = 0;
+                RegWrite = 1;
+            end
 
-        output [2*DATA_W - 1 : 0]   o_data,  // output value
-        output                      o_done   // output valid signal
-    );
-    // Todo: HW2
+            // Load instructions
+            7'b0000011: begin
+                Branch = 0;
+                MemRead = 1;
+                MemtoReg = 1;
+                ALUOp = 3'b000;
+                MemWrite = 0;
+                ALUSrc = 1;
+                RegWrite = 1;
+            end
+
+            // Store instructions
+            7'b0100011: begin
+                Branch = 0;
+                MemRead = 0;
+                MemtoReg = 0;
+                ALUOp = 3'b000;
+                MemWrite = 1;
+                ALUSrc = 1;
+                RegWrite = 0;
+            end
+
+            // Branch instructions
+            7'b1100011: begin
+                Branch = 1;
+                MemRead = 0;
+                MemtoReg = 0;
+                ALUOp = 3'b000;
+                MemWrite = 0;
+                ALUSrc = 0;
+                RegWrite = 0;
+            end
+
+            // Immediate instructions
+            7'b0010011: begin
+                Branch = 0;
+                MemRead = 0;
+                MemtoReg = 0;
+                case (func3)
+                    3'b000: ALUOp = 3'b000; // addi
+                    3'b001: ALUOp = 3'b100; // slli
+                    3'b010: ALUOp = 3'b101; // slti
+                    3'b101: ALUOp = 3'b110; // srai
+                    default: ALUOp = 3'b000;
+                endcase
+                MemWrite = 0;
+                ALUSrc = 1;
+                RegWrite = 1;
+            end
+
+            // Jump instructions
+            7'b1101111: begin
+                Branch = 0;
+                MemRead = 0;
+                MemtoReg = 0;
+                ALUOp = 3'b000;
+                MemWrite = 0;
+                ALUSrc = 0;
+                RegWrite = 1;
+            end
+
+            // Ecall instruction
+            7'b1110011: begin
+                Branch = 0;
+                MemRead = 0;
+                MemtoReg = 0;
+                ALUOp = 3'b000;
+                MemWrite = 0;
+                ALUSrc = 0;
+                RegWrite = 0;
+            end
+
+            default: begin
+                Branch = 0;
+                MemRead = 0;
+                MemtoReg = 0;
+                ALUOp = 3'b000;
+                MemWrite = 0;
+                ALUSrc = 0;
+                RegWrite = 0;
+            end
+        endcase
+    end
 endmodule
 
 module Cache#(
