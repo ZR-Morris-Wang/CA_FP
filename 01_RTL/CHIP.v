@@ -47,6 +47,7 @@ module CHIP #(                                                                  
     parameter lwop = 7'b0000011;
     parameter swop = 7'b0100011;
     parameter mulop = 7'b0110011;
+    parameter divop = 7'b0110011;
 
     parameter beqop = 7'b1100011;
     parameter bgeop = 7'b1100011;
@@ -161,7 +162,7 @@ module CHIP #(                                                                  
         .i_inst   (),
         .o_data   (),
         .o_done   (),
-    )
+    );
 
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
 // Always Blocks
@@ -177,12 +178,8 @@ module CHIP #(                                                                  
             PC <= next_PC;
         end
     end
+
 endmodule
-
-
-
-
-
 
 
 
@@ -230,6 +227,63 @@ module Reg_file(i_clk, i_rst_n, wen, rs1, rs2, rd, wdata, rdata1, rdata2);
     end
 endmodule
 
+module ALU (
+    input                       i_clk,   // clock
+    input                       i_rst_n, // reset
+
+    input                       i_valid, // input valid signal
+    input [BIT_W - 1 : 0]       i_A,     // input operand A
+    input [BIT_W - 1 : 0]       i_B,     // input operand B
+    input [        3 : 0]       ALUOp,  // instruction
+
+    output [2*BIT_W - 1 : 0]    o_data,  // output value
+    output                      o_done   // output valid signal
+
+);
+    always @(posedge i_clk or negedge i_rst_n) begin
+        if(i_valid && !i_rst_n) begin
+            case (ALUOp)
+                4'b0000: begin // add
+                    o_data <= i_A + i_B;
+                    o_done <= 1;
+                end
+                4'b0001: begin // sub
+                    o_data <= i_A - i_B;
+                    o_done <= 1;
+                end
+                4'b0010: begin // and
+                    o_data <= i_A & i_B;
+                    o_done <= 1;
+                end
+                4'b0011: begin // xor
+                    o_data <= i_A ^ i_B;
+                    o_done <= 1;
+                end
+                4'b0100: begin // slli
+                    o_data <= i_A << i_B;
+                    o_done <= 1;
+                end
+                4'b0101: begin // slti
+                    o_data <= ($signed(i_A) < $signed(i_B)) ? {63'b0, 1'b1} : {63'b0, 1'b0};
+                    o_done <= 1;
+                end
+                4'b0110: begin // srai
+                    o_data <= i_A >>> i_B;
+                    o_done <= 1;
+                end
+                default: begin
+                    o_data <= 0;
+                    o_done <= 0;
+                end
+            endcase
+        end
+        else begin
+            o_data <= 0;
+            o_done <= 0;
+        end
+    end
+endmodule
+
 module ControlUnit(
     input[6:0]      opcode,
     input[2:0]      func3,
@@ -252,16 +306,22 @@ module ControlUnit(
                 MemtoReg = 0;
                 case (func3)
                     3'b000: begin
-                        case (fun7)
-                            7'b0000000: ALUOp = 3'b000; // add
-                            7'b0100000: ALUOp = 3'b001; // sub
-                            7'b0000001: ALUOp = 3'b111; // mul
-                            default: ALUOp = 3'b000;
+                        case (func7)
+                            7'b0000000: ALUOp = 4'b0000; // add
+                            7'b0100000: ALUOp = 4'b0001; // sub
+                            7'b0000001: ALUOp = 4'b0111; // mul
+                            default: ALUOp = 4'b0000;
                         endcase
                     end
-                    3'b111: ALUOp = 3'b010; // and
-                    3'b100: ALUOp = 3'b011; // xor
-                    default: ALUOp = 3'b000;
+                    3'b111: ALUOp = 4'b0010; // and
+                    3'b100: begin
+                        case(func7)
+                            ALUOp = 4'b0011; // xor
+                            ALUOp = 4'b1000; // div
+                            default: ALUOp = 4'b0000;
+                        endcase
+                    end
+                    default: ALUOp = 4'b0000;
                 endcase
                 MemWrite = 0;
                 ALUSrc = 0;
@@ -273,7 +333,7 @@ module ControlUnit(
                 Branch = 0;
                 MemRead = 1;
                 MemtoReg = 1;
-                ALUOp = 3'b000;
+                ALUOp = 4'b0000;
                 MemWrite = 0;
                 ALUSrc = 1;
                 RegWrite = 1;
@@ -284,7 +344,7 @@ module ControlUnit(
                 Branch = 0;
                 MemRead = 0;
                 MemtoReg = 0;
-                ALUOp = 3'b000;
+                ALUOp = 4'b0000;
                 MemWrite = 1;
                 ALUSrc = 1;
                 RegWrite = 0;
@@ -295,7 +355,7 @@ module ControlUnit(
                 Branch = 1;
                 MemRead = 0;
                 MemtoReg = 0;
-                ALUOp = 3'b000;
+                ALUOp = 4'b1111;
                 MemWrite = 0;
                 ALUSrc = 0;
                 RegWrite = 0;
@@ -307,11 +367,11 @@ module ControlUnit(
                 MemRead = 0;
                 MemtoReg = 0;
                 case (func3)
-                    3'b000: ALUOp = 3'b000; // addi
-                    3'b001: ALUOp = 3'b100; // slli
-                    3'b010: ALUOp = 3'b101; // slti
-                    3'b101: ALUOp = 3'b110; // srai
-                    default: ALUOp = 3'b000;
+                    3'b000: ALUOp = 4'b0000; // addi
+                    3'b001: ALUOp = 4'b0100; // slli
+                    3'b010: ALUOp = 4'b0101; // slti
+                    3'b101: ALUOp = 4'b0110; // srai
+                    default: ALUOp = 4'b0000;
                 endcase
                 MemWrite = 0;
                 ALUSrc = 1;
@@ -323,7 +383,7 @@ module ControlUnit(
                 Branch = 0;
                 MemRead = 0;
                 MemtoReg = 0;
-                ALUOp = 3'b000;
+                ALUOp = 4'b0000;
                 MemWrite = 0;
                 ALUSrc = 0;
                 RegWrite = 1;
@@ -334,7 +394,7 @@ module ControlUnit(
                 Branch = 0;
                 MemRead = 0;
                 MemtoReg = 0;
-                ALUOp = 3'b000;
+                ALUOp = 4'b0000;
                 MemWrite = 0;
                 ALUSrc = 0;
                 RegWrite = 0;
@@ -344,7 +404,7 @@ module ControlUnit(
                 Branch = 0;
                 MemRead = 0;
                 MemtoReg = 0;
-                ALUOp = 3'b000;
+                ALUOp = 4'b0000;
                 MemWrite = 0;
                 ALUSrc = 0;
                 RegWrite = 0;
