@@ -29,7 +29,69 @@ module CHIP #(                                                                  
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
 
     // TODO: any declaration
+    // opcode
+    parameter aupicop = 7'b0010111;
+    parameter jalop = 7'b1101111;
+    parameter jalrop = 7'b110111;
     
+    parameter addop = 7'b0110011;
+    parameter subop = 7'b0110011;
+    parameter andop = 7'b0110011;
+    parameter xorop = 7'b0110011;
+
+    parameter addiop = 7'b0010011;
+    parameter slliop = 7'b0010011;
+    parameter slti = 7'b0010011;
+    parameter srai = 7'b0010011;
+
+    parameter lwop = 7'b0000011;
+    parameter swop = 7'b0100011;
+    parameter mulop = 7'b0110011;
+
+    parameter beqop = 7'b1100011;
+    parameter bgeop = 7'b1100011;
+    parameter bltop = 7'b1100011;
+    parameter bneop = 7'b1100011;
+
+    parameter ecallop = 7'b1110011;
+
+    // function 3
+    parameter jalrf3 = 3'b000;
+    
+    parameter addf3 = 3'b000;
+    parameter subf3 = 3'b000;
+    parameter andf3 = 3'b111;
+    parameter xorf3 = 3'b100;
+
+    parameter addif3 = 3'b000;
+    parameter sllif3 = 3'b001;
+    parameter sltif3 = 3'b010;
+    parameter sraif3 = 3'b101;
+
+    parameter lwf3 = 3'b010;
+    parameter swf3 = 3'b010;
+    parameter mulf3 = 3'b000;
+
+    parameter beqf3 = 3'b000;
+    parameter bgef3 = 3'b101;
+    parameter bltf3 = 3'b100;
+    parameter bnef3 = 3'b001;
+
+    parameter ecallf3 = 3'b000;
+
+    // function 7
+    parameter addf7 = 7'b0000000;
+    parameter subf7 = 7'b0100000;
+    parameter andf7 = 7'b0000000;
+    parameter xorf7 = 7'b0000000;
+
+    parameter sllif7 = 7'b0000000;
+    parameter sraif7 = 7'b0100000;
+
+    parameter mulf7 = 7'b0000001;
+    
+    // immediate
+    parameter ecallimm = 12'b000000000000;
 
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
 // Wires and Registers
