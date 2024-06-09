@@ -38,13 +38,16 @@ module CHIP #(                                                                  
     // TODO: any declaration
         reg [BIT_W-1:0] PC, next_PC; // PC memory
         
-        reg write_enable; //registers
-        reg [4:0] register_source_1, register_source_2, register_destination;
-        reg [BIT_W-1; 0] write_data, read_data_1, read_data_2;
+        //Reg_file
+        reg write_enable; //I
+        reg [4:0] register_source_1, register_source_2, register_destination; //I
+        reg [BIT_W-1; 0] write_data; //I
+        reg [BIT_W-1; 0] read_data_1, read_data_2; //O
 
-        wire wen; //registers
+        wire wen;
         wire [4:0] rs1, rs2, rd;
-        wire rdata1, rdata2;
+        wire [BIT_W-1; 0] wdata;
+        wire [BIT_W-1; 0] rdata1, rdata2;
 
         wire mem_cen, mem_wen; //cache/data memory
         wire [BIT_W-1:0] mem_addr, mem_wdata, mem_rdata;
@@ -59,12 +62,16 @@ module CHIP #(                                                                  
     // TODO: any wire assignment
 
     // Assign wires to F/Fs
-        assign wen = write_enable;      
-        assign rs1 = register_source_1;
+        assign wen = write_enable; //1b I
+
+        assign rs1 = register_source_1; //4b I
         assign rs2 = register_source_2;
         assign rd = register_destination;
-        assign rdata1 = read_data_1;
-        assign rdata2 = read_data_2;
+
+        assign wdata = write_data; //32b I
+
+        // assign rdata1 = read_data_1; //32b O
+        // assign rdata2 = read_data_2;
     
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
 // Submoddules
@@ -72,14 +79,14 @@ module CHIP #(                                                                  
 
     // TODO: Reg_file wire connection
     Reg_file reg0(               
-        .i_clk  (i_clk),             
-        .i_rst_n(i_rst_n),         
-        .wen    (wen),          
-        .rs1    (rs1),                
-        .rs2    (rs2),                
-        .rd     (rd),                 
-        .wdata  (i_DMEM_rdata),             
-        .rdata1 (rdata1),           
+        .i_clk  (i_clk),
+        .i_rst_n(i_rst_n),
+        .wen    (wen),
+        .rs1    (rs1),
+        .rs2    (rs2),
+        .rd     (rd),
+        .wdata  (wdata),
+        .rdata1 (rdata1),
         .rdata2 (rdata2)
     );
 
