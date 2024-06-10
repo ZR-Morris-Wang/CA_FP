@@ -107,7 +107,6 @@ module CHIP #(                                                                  
         reg ecallreg;
         
         //w/ dmem
-        reg dmem_stall, dmem_stall_nxt;
         reg dmem_cen, dmem_cen_nxt;
         reg dmem_wen, dmem_wen_nxt;
 
@@ -158,8 +157,6 @@ module CHIP #(                                                                  
         //termination
         assign o_finish = ecallreg;
 
-        //IMEM
-        assign i_DMEM_stall = dmem_stall_nxt;
 
         //Reg_file
         assign rs1 = register_source_1; 
@@ -415,12 +412,10 @@ module CHIP #(                                                                  
         if (!i_rst_n) begin
             PC <= 32'h00010000; // Do not modify this value!!!
             state <= 1'b0;
-            dmem_stall <= 1'b0;
         end
         else begin
             PC <= next_PC;
             state <= state_nxt;
-            dmem_stall <= dmem_stall_nxt;
         end
     end
 
