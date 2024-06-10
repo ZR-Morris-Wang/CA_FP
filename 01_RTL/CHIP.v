@@ -222,6 +222,32 @@ module CHIP #(                                                                  
         next_PC = i_IMEM_data;
     end
 
+    always @(*) begin //update PC address
+        $display(i_IMEM_data);
+
+        case (Branch)
+            
+            1'b0: begin
+                next_PC = PC + 4;
+            end
+
+            1'b1: begin
+                case (o_DMEM_addr)
+                    0: begin
+                        next_PC = PC + ({i_IMEM_data[31], i_IMEM_data[7], i_IMEM_data[30:25], i_IMEM_data[11:8]} << 1);
+                    end
+                    default: begin
+                        next_PC = PC + 4;
+                    end
+                endcase
+            end
+
+            default: begin
+                next_PC = PC + 4;
+            end
+        endcase
+    end
+
     always @(*) begin //update rs1, rs2, rd
         case (next_PC[6:0])
             7'b0110011: begin //R-type
