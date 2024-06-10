@@ -229,7 +229,7 @@ module CHIP #(                                                                  
     // Todo: any combinational/sequential circuit
     always @(*) begin
         $display("stnxt=1");
-        state_nxt = 1;
+        
         // case (i_DMEM_stall)
         //     1'b1: begin
         //         state_nxt = 1'b0;
@@ -244,7 +244,8 @@ module CHIP #(                                                                  
         // endcase
     end
 
-    always @(*) begin //update PC address
+    always @(*) begin //update PC address (MUX1)
+        state_nxt = 1;
         $display("==");
         $display(i_IMEM_data);      // x
         $display(o_IMEM_addr);      // value
