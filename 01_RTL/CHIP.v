@@ -251,63 +251,100 @@ module CHIP #(                                                                  
     always @(*) begin //update rs1, rs2, rd
         case (next_PC[6:0])
             7'b0110011: begin //R-type
-                register_source_1 = next_PC[19:15];
-                register_source_2 = next_PC[24:20];
-                register_destination = next_PC[11:7];
+                register_source_1 = i_IMEM_data[19:15];
+                register_source_2 = i_IMEM_data[24:20];
+                register_destination = i_IMEM_data[11:7];
+                immediate = 0;
             end
             
             7'b1100111: begin //I-type (jalr)
-                register_source_1 = next_PC[19:15];
+                register_source_1 = i_IMEM_data[19:15];
                 register_source_2 = 0;
-                register_destination = next_PC[11:7];
+                register_destination = i_IMEM_data[11:7];
+                immediate = i_IMEM_data[31:20];
             end
 
             7'b0010011: begin //I-type (addi...)
-                register_source_1 = next_PC[19:15];
+                register_source_1 = i_IMEM_data[19:15];
                 register_source_2 = 0;
-                register_destination = next_PC[11:7];
+                register_destination = i_IMEM_data[11:7];
+                immediate = i_IMEM_data[31:20];
             end
 
             7'b0000011: begin //I-type (lw)
-                register_source_1 = next_PC[19:15];
+                register_source_1 = i_IMEM_data[19:15];
                 register_source_2 = 0;
-                register_destination = next_PC[11:7];
+                register_destination = i_IMEM_data[11:7];
+                immediate = i_IMEM_data[31:20];
             end
 
             7'b1110011: begin //I-type (Ecall)
-                register_source_1 = next_PC[19:15];
+                register_source_1 = i_IMEM_data[19:15];
                 register_source_2 = 0;
-                register_destination = next_PC[11:7];
+                register_destination = i_IMEM_data[11:7];
+                immediate = 0;
             end
 
             7'b0100011: begin //S-type
-                register_source_1 = next_PC[19:15];
-                register_source_2 = next_PC[24:20];
+                register_source_1 = i_IMEM_data[19:15];
+                register_source_2 = i_IMEM_data[24:20];
                 register_destination = 0;
+                immediate = {i_IMEM_data[31:25], i_IMEM_data[11:7]};
             end
 
             7'b1100011: begin //SB-type
-                register_source_1 = next_PC[19:15];
-                register_source_2 = next_PC[24:20];
+                register_source_1 = i_IMEM_data[19:15];
+                register_source_2 = i_IMEM_data[24:20];
                 register_destination = 0;
+                immediate = {i_IMEM_data[31], i_IMEM_data[7], i_IMEM_data[30:25], i_IMEM_data[11:8]};
             end
 
             7'b0010111: begin //U-type
                 register_source_1 = 0;
                 register_source_2 = 0;
-                register_destination = next_PC[11:7];
+                register_destination = i_IMEM_data[11:7];
+                immediate = i_IMEM_data[31:12];
             end
 
             7'b1101111: begin //UJ-type
                 register_source_1 = 0;
                 register_source_2 = 0;
-                register_destination = next_PC[11:7];
+                register_destination = i_IMEM_data[11:7];
+                immediate = {i_IMEM_data[31], i_IMEM_data[19:12], i_IMEM_data[30:21], i_IMEM_data[20]};
             end
 
             default: begin
                 register_source_1 = register_source_1;
                 register_source_2 = register_source_2;
                 register_destination = register_destination;
+                immediate = immediate;
+            end
+        endcase
+    end
+    
+    always @(*) begin //update r_data_1, r_data_2
+        read_data_1 = rdata1;
+        read_data_2 = rdata2;
+    end
+
+    always @(*) begin //update i_Breg (MUX2)
+        case (ALUSrc)
+            0: begin
+               i_Breg = read_data_2; 
+            end
+            1: begin
+               i_Breg = immediate; 
+            end
+        endcase
+    end
+
+    always @(*) begin //update write_data (MUX3)
+        case (MemtoReg)
+            0: begin
+               i_Breg = o_DMEM_addr; 
+            end
+            1: begin
+               i_Breg = i_DMEM_rdata; 
             end
         endcase
     end
