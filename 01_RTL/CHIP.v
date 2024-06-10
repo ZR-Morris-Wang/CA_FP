@@ -130,7 +130,7 @@ module CHIP #(                                                                  
         wire [BIT_W - 1:0] i_A_wire, i_B_wire;
 
         //state
-        reg state;
+        reg state, state_nxt;
 
         wire ali;
         wire alo;
@@ -144,6 +144,7 @@ module CHIP #(                                                                  
         
         //State
         assign o_IMEM_cen = state;
+        assign o_IMEM_addr = PC;
 
         //Reg_file
         assign rs1 = register_source_1; 
@@ -220,22 +221,23 @@ module CHIP #(                                                                  
     // Todo: any combinational/sequential circuit
     always @(*) begin
         case (i_DMEM_stall)
-            1: begin
-                state = 1'b0;
+            1'b1: begin
+                state_nxt = 1'b0;
             end
-            0: begin
-                state = 1'b1;
+            1'b0: begin
+                state_nxt = 1'b1;
             end
             default: begin
-                state = state;
+                state_nxt = 1'b1;
             end
         endcase
-        // next_PC = i_IMEM_data;
     end
 
     always @(*) begin //update PC address
         $display(i_IMEM_data);
-
+        $display(o_IMEM_addr);
+        $display(o_IMEM_cen);
+        $display(i_DMEM_stall);
         case (Branch)
             
             1'b0: begin
@@ -363,9 +365,11 @@ module CHIP #(                                                                  
     always @(posedge i_clk or negedge i_rst_n) begin
         if (!i_rst_n) begin
             PC <= 32'h00010000; // Do not modify this value!!!
+            state <= 0;
         end
         else begin
             PC <= next_PC;
+            state <= state_nxt;
         end
     end
 
@@ -604,7 +608,7 @@ module ControlUnit(
             // Store instructions
             7'b0100011: begin
                 branch = 0;
-                memrnw = 0;
+                memrnw = 1;
                 memtoreg = 0;
                 aluop = 4'b0000;
                 memwrite = 1;
