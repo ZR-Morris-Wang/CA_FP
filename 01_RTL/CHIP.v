@@ -103,8 +103,10 @@ module CHIP #(                                                                  
         // PC memory
         reg [BIT_W-1: 0] PC, next_PC; 
         
-        //IMEM
-        reg mem_stall, mem_stall_nxt;
+        //w/ mem
+        reg dmem_stall, dmem_stall_nxt;
+        reg dmem_cen, dmem_cen_nxt;
+        reg dmem_wen, dmem_wen_nxt;
 
         //Reg_file
         reg [4:0] register_source_1, register_source_2, register_destination; //I
@@ -150,7 +152,7 @@ module CHIP #(                                                                  
         assign o_IMEM_addr = PC;
 
         //IMEM
-        assign i_DMEM_stall = mem_stall_nxt;
+        // assign i_DMEM_stall = dmem_stall_nxt;
 
         //Reg_file
         assign rs1 = register_source_1; 
@@ -226,25 +228,31 @@ module CHIP #(                                                                  
     
     // Todo: any combinational/sequential circuit
     always @(*) begin
-        case (i_DMEM_stall)
-            1'b1: begin
-                state_nxt = 1'b0;
-            end
-            1'b0: begin
-                state_nxt = 1'b1;
-            end
-            default: begin
-                state_nxt = 1'b1;
-            end
-        endcase
+        $display("stnxt=1");
+        state_nxt = 1;
+        // case (i_DMEM_stall)
+        //     1'b1: begin
+        //         state_nxt = 1'b0;
+        //     end
+        //     1'b0: begin
+        //         state_nxt = 1'b1;
+        //     end
+        //     default: begin
+        //         $display("default");
+        //         state_nxt = 1'b1;
+        //     end
+        // endcase
     end
 
     always @(*) begin //update PC address
+        $display("==");
         $display(i_IMEM_data);      // x
         $display(o_IMEM_addr);      // value
         $display(o_IMEM_cen);      // x
         $display(i_DMEM_stall);      // x
-        mem_stall_nxt = 1'b0;
+        $display(state);
+        $display(state_nxt);
+        dmem_stall_nxt = 1'b0;
         case (Branch)
             
             1'b0: begin
@@ -373,12 +381,12 @@ module CHIP #(                                                                  
         if (!i_rst_n) begin
             PC <= 32'h00010000; // Do not modify this value!!!
             state <= 1'b0;
-            mem_stall <= 1'b0;
+            dmem_stall <= 1'b0;
         end
         else begin
             PC <= next_PC;
             state <= state_nxt;
-            mem_stall <= mem_stall_nxt;
+            dmem_stall <= dmem_stall_nxt;
         end
     end
 
