@@ -103,6 +103,9 @@ module CHIP #(                                                                  
         // PC memory
         reg [BIT_W-1: 0] PC, next_PC; 
         
+        //IMEM
+        reg mem_stall, mem_stall_nxt;
+
         //Reg_file
         reg [4:0] register_source_1, register_source_2, register_destination; //I
         reg [BIT_W-1: 0] write_data; //I
@@ -145,6 +148,9 @@ module CHIP #(                                                                  
         //State
         assign o_IMEM_cen = state;
         assign o_IMEM_addr = PC;
+
+        //IMEM
+        assign i_DMEM_stall = mem_stall_nxt;
 
         //Reg_file
         assign rs1 = register_source_1; 
@@ -365,11 +371,13 @@ module CHIP #(                                                                  
     always @(posedge i_clk or negedge i_rst_n) begin
         if (!i_rst_n) begin
             PC <= 32'h00010000; // Do not modify this value!!!
-            state <= 0;
+            state <= 1'b0;
+            mem_stall <= 1'b0;
         end
         else begin
             PC <= next_PC;
             state <= state_nxt;
+            mem_stall <= mem_stall_nxt;
         end
     end
 
