@@ -218,8 +218,18 @@ module CHIP #(                                                                  
     
     // Todo: any combinational/sequential circuit
     always @(*) begin
-        state = 1'b1;
-        next_PC = i_IMEM_data;
+        case (i_DMEM_stall)
+            1: begin
+                state = 1'b0;
+            end
+            0: begin
+                state = 1'b1;
+            end
+            default: begin
+                state = state;
+            end
+        endcase
+        // next_PC = i_IMEM_data;
     end
 
     always @(*) begin //update PC address
@@ -296,14 +306,14 @@ module CHIP #(                                                                  
                 register_source_1 = i_IMEM_data[19:15];
                 register_source_2 = i_IMEM_data[24:20];
                 register_destination = 0;
-                immediate = {i_IMEM_data[31], i_IMEM_data[7], i_IMEM_data[30:25], i_IMEM_data[11:8]};
+                immediate = {i_IMEM_data[31], i_IMEM_data[7], i_IMEM_data[30:25], i_IMEM_data[11:8]}  << 2;
             end
 
             7'b0010111: begin //U-type
                 register_source_1 = 0;
                 register_source_2 = 0;
                 register_destination = i_IMEM_data[11:7];
-                immediate = i_IMEM_data[31:12];
+                immediate = i_IMEM_data[31:12] << 12;
             end
 
             7'b1101111: begin //UJ-type
