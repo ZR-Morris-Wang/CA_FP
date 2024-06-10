@@ -102,8 +102,11 @@ module CHIP #(                                                                  
         
         // PC memory
         reg [BIT_W-1: 0] PC, next_PC; 
+
+        //termination
+        reg ecallreg;
         
-        //w/ mem
+        //w/ dmem
         reg dmem_stall, dmem_stall_nxt;
         reg dmem_cen, dmem_cen_nxt;
         reg dmem_wen, dmem_wen_nxt;
@@ -150,6 +153,9 @@ module CHIP #(                                                                  
         //State
         assign o_IMEM_cen = state;
         assign o_IMEM_addr = PC;
+
+        //termination
+        assign o_finish = ecallreg;
 
         //IMEM
         assign i_DMEM_stall = dmem_stall_nxt;
@@ -228,7 +234,6 @@ module CHIP #(                                                                  
     
     // Todo: any combinational/sequential circuit
     always @(*) begin
-        $display("stnxt=1");
         
         // case (i_DMEM_stall)
         //     1'b1: begin
@@ -246,13 +251,24 @@ module CHIP #(                                                                  
 
     always @(*) begin //update PC address (MUX1)
         state_nxt = 1;
-        $display("==");
-        $display(i_IMEM_data);      // x
-        $display(o_IMEM_addr);      // value
-        $display(o_IMEM_cen);      // x
-        $display(i_DMEM_stall);      // x
-        $display(state);
-        $display(state_nxt);
+        if (o_IMEM_addr <= 65600) begin
+            $display("==");      // x
+            $display(i_IMEM_data);      // x
+            $display(o_IMEM_addr);      // value
+            $display(o_IMEM_cen);      // x
+            $display(i_DMEM_stall);      // x
+            $display(state);
+            $display(state_nxt);
+        end
+        
+        case (i_IMEM_data)
+            32'd73: begin
+                ecallreg = 1;
+            end
+            default: begin
+                ecallreg = 0;
+            end
+        endcase
 
         case (Branch)
             
@@ -512,7 +528,7 @@ module ALU #(
                 done = 1'b1;
             end
             4'b1010: begin //bge
-                op = ((i_a - i_b) > 0) ? 1 : 0;
+                op = ((i_a - i_b) >= 0) ? 1 : 0;
                 done = 1'b1;
             end      
             4'b1011: begin //blt
