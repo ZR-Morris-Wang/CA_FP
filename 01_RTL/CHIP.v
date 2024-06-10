@@ -122,15 +122,16 @@ module CHIP #(                                                                  
         wire [BIT_W-1: 0] rdata1, rdata2;
 
         //controller
-        reg [6:0] opc; //I
+        reg [6:0] opcode; //I
         reg [2:0] func3;
         reg [6:0] func7;
 
-        wire [6:0] opc_w;
+        wire [6:0] opcode_w;
         wire [2:0] func3_w;
         wire [6:0] func7_w;
 
-        wire Branch, MemRnW, MemtoReg, MemWrite, ALUSrc, RegWrite; //O
+        wire MemRnW, MemtoReg, MemWrite, ALUSrc, RegWrite; //O
+        wire [1:0] Branch; 
         wire [3:0] ALUOp; 
         
         //ALU/MULDIV
@@ -167,7 +168,7 @@ module CHIP #(                                                                  
         assign wdata = write_data;
 
         //controller
-        assign opc_w = opc;
+        assign opcode_w = opcode;
         assign func3_w = func3;
         assign func7_w = func7;
 
@@ -216,7 +217,7 @@ module CHIP #(                                                                  
     //     .o_done  (),
     // );
     ControlUnit cu0(
-        .opcode  (opc_w),
+        .opcode  (opcode_w),
         .func3   (func3_w),
         .func7   (func7_w),
         .Branch  (Branch),
@@ -271,12 +272,11 @@ module CHIP #(                                                                  
         endcase
 
         case (Branch)
-            
-            1'b0: begin
+            2'b00: begin
                 next_PC = PC + 4;
             end
 
-            1'b1: begin
+            2'b01: begin
                 case (o_DMEM_addr)
                     0: begin
                         next_PC = PC + ({i_IMEM_data[31], i_IMEM_data[7], i_IMEM_data[30:25], i_IMEM_data[11:8]} << 1);
@@ -287,6 +287,23 @@ module CHIP #(                                                                  
                 endcase
             end
 
+            2'b10: begin
+                case (opcode)
+                    aupicop: begin 
+                        register_destination = PC + immediate;
+                        next_PC = PC + 4;
+                    end
+                    jalop: begin
+                        register_destination = PC + 4;
+                        next_PC = register_source_1 + immediate;
+                    end
+                endcase
+            end
+
+            2'b11: begin
+                register_destination = PC + 4;
+                next_PC = PC + immediate;
+            end
             default: begin
                 next_PC = PC + 4;
             end
@@ -594,7 +611,7 @@ module ControlUnit(
     input[6:0]      opcode,
     input[2:0]      func3,
     input[6:0]      func7,
-    output          Branch,
+    output[1:0]     Branch,
     output          MemRnW,
     output          MemtoReg,
     output[3:0]     ALUOp,
@@ -602,7 +619,8 @@ module ControlUnit(
     output          ALUSrc,
     output          RegWrite
 );
-    reg branch, memrnw, memtoreg, memwrite, alusrc, regwrite;
+    reg memrnw, memtoreg, memwrite, alusrc, regwrite;
+    reg [1:0] branch;
     reg [2:0] aluop;
 
     assign Branch = branch;
@@ -613,11 +631,13 @@ module ControlUnit(
     assign ALUSrc = alusrc;
     assign RegWrite = regwrite;
 
+    parameter aupicop = 7'b0010111;
+
     always @(*) begin
         case (opcode)
             // R-type instructions
             7'b0110011: begin
-                branch = 0;
+                branch = 2'b00;
                 memrnw = 0;
                 memtoreg = 0;
                 case (func3)
@@ -646,7 +666,7 @@ module ControlUnit(
 
             // Load instructions
             7'b0000011: begin
-                branch = 0;
+                branch = 2'b00;
                 memrnw = 1;
                 memtoreg = 1;
                 aluop = 4'b0000;
@@ -657,7 +677,7 @@ module ControlUnit(
 
             // Store instructions
             7'b0100011: begin
-                branch = 0;
+                branch = 2'b00;
                 memrnw = 1;
                 memtoreg = 0;
                 aluop = 4'b0000;
@@ -668,7 +688,7 @@ module ControlUnit(
 
             // branch instructions
             7'b1100011: begin
-                branch = 1;
+                branch = 2'b01;
                 memrnw = 0;
                 memtoreg = 0;
                 aluop = 4'b1111;
@@ -679,7 +699,7 @@ module ControlUnit(
 
             // Immediate instructions
             7'b0010011: begin
-                branch = 0;
+                branch = 2'b00;
                 memrnw = 0;
                 memtoreg = 0;
                 case (func3)
@@ -696,7 +716,14 @@ module ControlUnit(
 
             // Jump instructions
             7'b1101111: begin
-                branch = 0;
+                case(func3)
+                    3'b000: begin
+                        branch = 2'b11;
+                    end
+                    default: begin
+                        branch = 2'b10;
+                    end
+                endcase
                 memrnw = 0;
                 memtoreg = 0;
                 aluop = 4'b0000;
@@ -707,7 +734,7 @@ module ControlUnit(
 
             // Ecall instruction
             7'b1110011: begin
-                branch = 0;
+                branch = 2'b00;
                 memrnw = 0;
                 memtoreg = 0;
                 aluop = 4'b0000;
@@ -715,9 +742,17 @@ module ControlUnit(
                 alusrc = 0;
                 regwrite = 0;
             end
-
+            aupicop: begin
+                branch = 2'b10;
+                memrnw = 0;
+                memtoreg = 0;
+                aluop = 4'b0000;
+                memwrite = 0;
+                alusrc = 0;
+                regwrite = 1;
+            end
             default: begin
-                branch = 0;
+                branch = 2'b00;
                 memrnw = 0;
                 memtoreg = 0;
                 aluop = 4'b0000;
