@@ -240,10 +240,11 @@ module CHIP #(                                                                  
     end
 
     always @(*) begin //update PC address
-        $display(i_IMEM_data);
-        $display(o_IMEM_addr);
-        $display(o_IMEM_cen);
-        $display(i_DMEM_stall);
+        $display(i_IMEM_data);      // x
+        $display(o_IMEM_addr);      // value
+        $display(o_IMEM_cen);      // x
+        $display(i_DMEM_stall);      // x
+        mem_stall_nxt = 1'b0;
         case (Branch)
             
             1'b0: begin
