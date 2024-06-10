@@ -107,6 +107,7 @@ module CHIP #(                                                                  
         reg [4:0] register_source_1, register_source_2, register_destination; //I
         reg [BIT_W-1: 0] write_data; //I
         reg [BIT_W-1: 0] read_data_1, read_data_2; //O
+        reg [19:0] immediate;
 
         wire [4:0] rs1, rs2, rd;
         wire [BIT_W-1: 0] wdata;
