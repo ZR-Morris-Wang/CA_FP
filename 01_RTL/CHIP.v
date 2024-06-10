@@ -152,7 +152,7 @@ module CHIP #(                                                                  
         assign o_IMEM_addr = PC;
 
         //IMEM
-        // assign i_DMEM_stall = dmem_stall_nxt;
+        assign i_DMEM_stall = dmem_stall_nxt;
 
         //Reg_file
         assign rs1 = register_source_1; 
@@ -252,7 +252,7 @@ module CHIP #(                                                                  
         $display(i_DMEM_stall);      // x
         $display(state);
         $display(state_nxt);
-        dmem_stall_nxt = 1'b0;
+
         case (Branch)
             
             1'b0: begin
@@ -504,6 +504,22 @@ module ALU #(
             end
             4'b0110: begin // srai
                 op = i_a >>> i_b;
+                done = 1'b1;
+            end
+            4'b1001: begin //beq
+                op = ((i_a - i_b) == 0) ? 1 : 0;
+                done = 1'b1;
+            end
+            4'b1010: begin //bge
+                op = ((i_a - i_b) > 0) ? 1 : 0;
+                done = 1'b1;
+            end      
+            4'b1011: begin //blt
+                op = ((i_a - i_b) < 0) ? 1 : 0;
+                done = 1'b1;
+            end
+            4'b1100: begin //bne
+                op = ((i_a - i_b) != 0) ? 1 : 0;
                 done = 1'b1;
             end
             default: begin
