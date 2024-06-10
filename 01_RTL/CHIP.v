@@ -122,7 +122,7 @@ module CHIP #(                                                                  
         wire [6:0] func7_w;
 
         wire Branch, MemRnW, MemtoReg, MemWrite, ALUSrc, RegWrite; //O
-        wire [2:0] ALUOp; 
+        wire [3:0] ALUOp; 
         
         //ALU/MULDIV
         reg [BIT_W - 1:0] i_Breg;
@@ -130,6 +130,9 @@ module CHIP #(                                                                  
 
         //state
         reg state;
+
+        wire ali;
+        wire alo;
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
 // Continuous Assignment
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -179,31 +182,31 @@ module CHIP #(                                                                  
     ALU alu0(
         .i_clk   (i_clk),
         .i_rst_n (i_rst_n),
-        .i_valid (),
+        .i_valid (ali),
         .i_A     (i_A_wire),
         .i_B     (i_B_wire),
-        .i_inst  (ALUOp),
+        .ALUOp  (ALUOp),
         .o_data  (o_DMEM_addr),
-        .o_done  (),
+        .o_done  (alo)
     );
-    MULDIV_unit md0(
-        .i_clk   (i_clk),
-        .i_rst_n (i_rst_n),
-        .i_valid (),
-        .i_A     (i_A_wire),
-        .i_B     (i_B_wire),
-        .i_inst  (i_inst_wire),
-        .o_data  (o_DMEM_addr),
-        .o_done  (),
-    );
+    // MULDIV_unit md0(
+    //     .i_clk   (i_clk),
+    //     .i_rst_n (i_rst_n),
+    //     .i_valid (),
+    //     .i_A     (i_A_wire),
+    //     .i_B     (i_B_wire),
+    //     .i_inst  (i_inst_wire),
+    //     .o_data  (o_DMEM_addr),
+    //     .o_done  (),
+    // );
     ControlUnit cu0(
         .opcode  (opc_w),
         .func3   (func3_w),
         .func7   (func7_w),
         .Branch  (Branch),
         .MemRnW  (MemRnW),
-        .MemtoReg(MemtoReg)
-        .ALUOp   (ALUOp)
+        .MemtoReg(MemtoReg),
+        .ALUOp   (ALUOp),
         .MemWrite(MemWrite),
         .ALUSrc  (ALUSrc),
         .RegWrite(RegWrite)
@@ -221,56 +224,55 @@ module CHIP #(                                                                  
 
     always @(*) begin //update rs1, rs2, rd
         case (next_PC[6:0])
-            
             7'b0110011: begin //R-type
                 register_source_1 = next_PC[19:15];
                 register_source_2 = next_PC[24:20];
                 register_destination = next_PC[11:7];
             end
             
-            7'1100111: begin //I-type (jalr)
+            7'b1100111: begin //I-type (jalr)
                 register_source_1 = next_PC[19:15];
                 register_source_2 = 0;
                 register_destination = next_PC[11:7];
             end
 
-            7'0010011: begin //I-type (addi...)
+            7'b0010011: begin //I-type (addi...)
                 register_source_1 = next_PC[19:15];
                 register_source_2 = 0;
                 register_destination = next_PC[11:7];
             end
 
-            7'0000011: begin //I-type (lw)
+            7'b0000011: begin //I-type (lw)
                 register_source_1 = next_PC[19:15];
                 register_source_2 = 0;
                 register_destination = next_PC[11:7];
             end
 
-            7'1110011: begin //I-type (Ecall)
+            7'b1110011: begin //I-type (Ecall)
                 register_source_1 = next_PC[19:15];
                 register_source_2 = 0;
                 register_destination = next_PC[11:7];
             end
 
-            7'0100011: begin //S-type
+            7'b0100011: begin //S-type
                 register_source_1 = next_PC[19:15];
                 register_source_2 = next_PC[24:20];
                 register_destination = 0;
             end
 
-            7'1100011: begin //SB-type
+            7'b1100011: begin //SB-type
                 register_source_1 = next_PC[19:15];
                 register_source_2 = next_PC[24:20];
                 register_destination = 0;
             end
 
-            7'0010111: begin //U-type
+            7'b0010111: begin //U-type
                 register_source_1 = 0;
                 register_source_2 = 0;
                 register_destination = next_PC[11:7];
             end
 
-            7'1101111: begin //UJ-type
+            7'b1101111: begin //UJ-type
                 register_source_1 = 0;
                 register_source_2 = 0;
                 register_destination = next_PC[11:7];
@@ -341,7 +343,9 @@ module Reg_file(i_clk, i_rst_n, wen, rs1, rs2, rd, wdata, rdata1, rdata2);
     end
 endmodule
 
-module ALU (
+module ALU #(
+    parameter BIT_W = 32
+)(
     input                       i_clk,   // clock
     input                       i_rst_n, // reset
 
@@ -354,49 +358,108 @@ module ALU (
     output                      o_done   // output valid signal
 
 );
+    reg  [ BIT_W-1: 0 ] i_a;
+    reg  [ BIT_W-1: 0 ] i_b;
+    reg  [ 3: 0 ] aluop;
+    reg  [ 2 * BIT_W-1: 0] op;
+    reg done;
+
     assign i_valid = 1;
-    always @(posedge i_clk or negedge i_rst_n) begin
-        if(i_valid && !i_rst_n) begin
-            case (ALUOp)
-                4'b0000: begin // add
-                    o_data <= i_A + i_B;
-                    o_done <= 1;
-                end
-                4'b0001: begin // sub
-                    o_data <= i_A - i_B;
-                    o_done <= 1;
-                end
-                4'b0010: begin // and
-                    o_data <= i_A & i_B;
-                    o_done <= 1;
-                end
-                4'b0011: begin // xor
-                    o_data <= i_A ^ i_B;
-                    o_done <= 1;
-                end
-                4'b0100: begin // slli
-                    o_data <= i_A << i_B;
-                    o_done <= 1;
-                end
-                4'b0101: begin // slti
-                    o_data <= ($signed(i_A) < $signed(i_B)) ? {63'b0, 1'b1} : {63'b0, 1'b0};
-                    o_done <= 1;
-                end
-                4'b0110: begin // srai
-                    o_data <= i_A >>> i_B;
-                    o_done <= 1;
-                end
-                default: begin
-                    o_data <= 0;
-                    o_done <= 0;
-                end
-            endcase
+    assign o_data = op;
+    assign o_done = done;
+
+    always @(*) begin
+        if (i_valid) begin
+            i_a = i_A;
+            i_b = i_B;
+            aluop = ALUOp;
         end
         else begin
-            o_data <= 0;
-            o_done <= 0;
+            i_a = i_a;
+            i_b = i_b;
+            aluop = aluop;
         end
     end
+
+    always @(*) begin
+        case (ALUOp)
+            4'b0000: begin // add
+                op = i_a + i_b;
+                done = 1'b1;
+            end
+            4'b0001: begin // sub
+                op = i_a - i_b;
+                done = 1'b1;
+            end
+            4'b0010: begin // and
+                op = i_a & i_b;
+                done = 1'b1;
+            end
+            4'b0011: begin // xor
+                op = i_a ^ i_b;
+                done = 1'b1;
+            end
+            4'b0100: begin // slli
+                op = i_a << i_b;
+                done = 1'b1;
+            end
+            4'b0101: begin // slti
+                op = ($signed(i_a) < $signed(i_b)) ? {63'b0, 1'b1} : {63'b0, 1'b0};
+                done = 1'b1;
+            end
+            4'b0110: begin // srai
+                op = i_a >>> i_b;
+                done = 1'b1;
+            end
+            default: begin
+                op = 0;
+                done = 1'b0;
+            end
+        endcase
+    end
+
+    // always @(posedge i_clk or negedge i_rst_n) begin
+    //     if(i_valid && !i_rst_n) begin
+    //         case (ALUOp)
+    //             4'b0000: begin // add
+    //                 o_data <= i_A + i_B;
+    //                 o_done <= 1;
+    //             end
+    //             4'b0001: begin // sub
+    //                 o_data <= i_A - i_B;
+    //                 o_done <= 1;
+    //             end
+    //             4'b0010: begin // and
+    //                 o_data <= i_A & i_B;
+    //                 o_done <= 1;
+    //             end
+    //             4'b0011: begin // xor
+    //                 o_data <= i_A ^ i_B;
+    //                 o_done <= 1;
+    //             end
+    //             4'b0100: begin // slli
+    //                 o_data <= i_A << i_B;
+    //                 o_done <= 1;
+    //             end
+    //             4'b0101: begin // slti
+    //                 o_data <= ($signed(i_A) < $signed(i_B)) ? {63'b0, 1'b1} : {63'b0, 1'b0};
+    //                 o_done <= 1;
+    //             end
+    //             4'b0110: begin // srai
+    //                 o_data <= i_A >>> i_B;
+    //                 o_done <= 1;
+    //             end
+    //             default: begin
+    //                 o_data <= 0;
+    //                 o_done <= 0;
+    //             end
+    //         endcase
+    //     end
+    //     else begin
+    //         o_data <= 0;
+    //         o_done <= 0;
+    //     end
+    // end
 endmodule
 
 module ControlUnit(
@@ -406,123 +469,133 @@ module ControlUnit(
     output          Branch,
     output          MemRnW,
     output          MemtoReg,
-    output[2:0]     ALUOp,
+    output[3:0]     ALUOp,
     output          MemWrite,
     output          ALUSrc,
-    output          RegWrite,
+    output          RegWrite
 );
+    reg branch, memrnw, memtoreg, memwrite, alusrc, regwrite;
+    reg [2:0] aluop;
+
+    assign Branch = branch;
+    assign MemRnW = memrnw;
+    assign MemtoReg = memtoreg;
+    assign ALUOp = aluop;
+    assign MemWrite = memwrite;
+    assign ALUSrc = alusrc;
+    assign RegWrite = regwrite;
 
     always @(*) begin
         case (opcode)
             // R-type instructions
             7'b0110011: begin
-                Branch = 0;
-                MemRnW = 0;
-                MemtoReg = 0;
+                branch = 0;
+                memrnw = 0;
+                memtoreg = 0;
                 case (func3)
                     3'b000: begin
                         case (func7)
-                            7'b0000000: ALUOp = 4'b0000; // add
-                            7'b0100000: ALUOp = 4'b0001; // sub
-                            7'b0000001: ALUOp = 4'b0111; // mul
-                            default: ALUOp = 4'b0000;
+                            7'b0000000: aluop = 4'b0000; // add
+                            7'b0100000: aluop = 4'b0001; // sub
+                            7'b0000001: aluop = 4'b0111; // mul
+                            default: aluop = 4'b0000;
                         endcase
                     end
-                    3'b111: ALUOp = 4'b0010; // and
+                    3'b111: aluop = 4'b0010; // and
                     3'b100: begin
                         case(func7)
-                            ALUOp = 4'b0011; // xor
-                            ALUOp = 4'b1000; // div
-                            default: ALUOp = 4'b0000;
+                            7'b0000000: aluop = 4'b0011; // xor
+                            7'b0000001: aluop = 4'b1000; // div
+                            default: aluop = 4'b0000;
                         endcase
                     end
-                    default: ALUOp = 4'b0000;
+                    default: aluop = 4'b0000;
                 endcase
-                MemWrite = 0;
-                ALUSrc = 0;
-                RegWrite = 1;
+                memwrite = 0;
+                alusrc = 0;
+                regwrite = 1;
             end
 
             // Load instructions
             7'b0000011: begin
-                Branch = 0;
-                MemRnW = 1;
-                MemtoReg = 1;
-                ALUOp = 4'b0000;
-                MemWrite = 0;
-                ALUSrc = 1;
-                RegWrite = 1;
+                branch = 0;
+                memrnw = 1;
+                memtoreg = 1;
+                aluop = 4'b0000;
+                memwrite = 0;
+                alusrc = 1;
+                regwrite = 1;
             end
 
             // Store instructions
             7'b0100011: begin
-                Branch = 0;
-                MemRnW = 0;
-                MemtoReg = 0;
-                ALUOp = 4'b0000;
-                MemWrite = 1;
-                ALUSrc = 1;
-                RegWrite = 0;
+                branch = 0;
+                memrnw = 0;
+                memtoreg = 0;
+                aluop = 4'b0000;
+                memwrite = 1;
+                alusrc = 1;
+                regwrite = 0;
             end
 
-            // Branch instructions
+            // branch instructions
             7'b1100011: begin
-                Branch = 1;
-                MemRnW = 0;
-                MemtoReg = 0;
-                ALUOp = 4'b1111;
-                MemWrite = 0;
-                ALUSrc = 0;
-                RegWrite = 0;
+                branch = 1;
+                memrnw = 0;
+                memtoreg = 0;
+                aluop = 4'b1111;
+                memwrite = 0;
+                alusrc = 0;
+                regwrite = 0;
             end
 
             // Immediate instructions
             7'b0010011: begin
-                Branch = 0;
-                MemRnW = 0;
-                MemtoReg = 0;
+                branch = 0;
+                memrnw = 0;
+                memtoreg = 0;
                 case (func3)
-                    3'b000: ALUOp = 4'b0000; // addi
-                    3'b001: ALUOp = 4'b0100; // slli
-                    3'b010: ALUOp = 4'b0101; // slti
-                    3'b101: ALUOp = 4'b0110; // srai
-                    default: ALUOp = 4'b0000;
+                    3'b000: aluop = 4'b0000; // addi
+                    3'b001: aluop = 4'b0100; // slli
+                    3'b010: aluop = 4'b0101; // slti
+                    3'b101: aluop = 4'b0110; // srai
+                    default: aluop = 4'b0000;
                 endcase
-                MemWrite = 0;
-                ALUSrc = 1;
-                RegWrite = 1;
+                memwrite = 0;
+                alusrc = 1;
+                regwrite = 1;
             end
 
             // Jump instructions
             7'b1101111: begin
-                Branch = 0;
-                MemRnW = 0;
-                MemtoReg = 0;
-                ALUOp = 4'b0000;
-                MemWrite = 0;
-                ALUSrc = 0;
-                RegWrite = 1;
+                branch = 0;
+                memrnw = 0;
+                memtoreg = 0;
+                aluop = 4'b0000;
+                memwrite = 0;
+                alusrc = 0;
+                regwrite = 1;
             end
 
             // Ecall instruction
             7'b1110011: begin
-                Branch = 0;
-                MemRnW = 0;
-                MemtoReg = 0;
-                ALUOp = 4'b0000;
-                MemWrite = 0;
-                ALUSrc = 0;
-                RegWrite = 0;
+                branch = 0;
+                memrnw = 0;
+                memtoreg = 0;
+                aluop = 4'b0000;
+                memwrite = 0;
+                alusrc = 0;
+                regwrite = 0;
             end
 
             default: begin
-                Branch = 0;
-                MemRnW = 0;
-                MemtoReg = 0;
-                ALUOp = 4'b0000;
-                MemWrite = 0;
-                ALUSrc = 0;
-                RegWrite = 0;
+                branch = 0;
+                memrnw = 0;
+                memtoreg = 0;
+                aluop = 4'b0000;
+                memwrite = 0;
+                alusrc = 0;
+                regwrite = 0;
             end
         endcase
     end
