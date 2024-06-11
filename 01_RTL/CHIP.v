@@ -32,7 +32,7 @@ module CHIP #(                                                                  
     // opcode
     parameter aupicop = 7'b0010111;
     parameter jalop = 7'b1101111;
-    parameter jalrop = 7'b110111;
+    parameter jalrop = 7'b1100111;
     
     parameter addop = 7'b0110011;
     parameter subop = 7'b0110011;
@@ -247,8 +247,9 @@ module CHIP #(                                                                  
         // endcase
     end
     always @(i_IMEM_data) begin
-        // opcode = i_IMEM_data[6:0];
-        if (o_IMEM_addr <= 65660) begin
+        opcode = i_IMEM_data[6:0];
+        $display("-=-=-==--=-=-=-=--=-=---=- %d -=-=-==--=-=-=-=--=-=---=-", o_IMEM_addr);
+        if (o_IMEM_addr <= 65700) begin
             $display("==");
             $display("%b", i_IMEM_data[6:0]);
             $display("opc :%b", opcode);
@@ -257,29 +258,44 @@ module CHIP #(                                                                  
             $display("rd :%d", register_destination);
             $display("imm :%d", immediate);
         end
+        // if (o_IMEM_addr == 65532 + 76 + 4) begin
+        //     $display("--------------------------- %b ---------------------------", i_IMEM_data[6:0]);
+        //     $display("--------------------------- %b ---------------------------", opcode);
+        // end
+        // if (o_IMEM_addr == 65532 + 76 + 8) begin
+        //     $display("-----------------++-------- %b ---------------------------", i_IMEM_data[6:0]);
+        //     $display("-----------------++-------- %b ---------------------------", opcode);
+        // end
+        // if (i_IMEM_data[6:0] == 7'b1101111) begin
+        //     $display("--------------------------- %b ---------------------------", state);
+        //     $display("--------------------------- %b ---------------------------", state_nxt);
+        //     $display("--------------------------- %b ---------------------------", o_IMEM_cen);
+        // end
     end
     always @(*) begin //update PC address (MUX1)
         state_nxt = 1;
         
         case (i_IMEM_data)
             32'h73: begin
+                $display("ecall--------------------------");
                 ecallreg = 1;
             end
             default: begin
+                $display("no ecall--------------------------");
                 ecallreg = 0;
             end
         endcase
 
         case (Branch)
             2'b00: begin
-                $display("no branch");
+                // $display("no branch");
                 next_PC = PC + 4;
             end
 
             2'b01: begin
                 case (o_DMEM_addr)
                     0: begin
-                        $display("branch");
+                        
                         next_PC = PC + ({i_IMEM_data[31], i_IMEM_data[7], i_IMEM_data[30:25], i_IMEM_data[11:8]} << 1);
                     end
                     default: begin
@@ -291,21 +307,23 @@ module CHIP #(                                                                  
             2'b10: begin
                 case (opcode)
                     aupicop: begin 
-                        $display("aupic");
+                        // $display("aupic");
                         register_destination = PC + immediate;
                         next_PC = PC + 4;
                     end
                     jalop: begin
-                        $display("jal");
+                        // $display("jal");
+                        
                         register_destination = PC + 4;
-                        next_PC = PC + immediate;
+                        next_PC = $signed(PC) + $signed(immediate);
                     end
                 endcase
             end
 
             2'b11: begin
+                $display("--------------------------- %b ---------------------------", read_data_1);
                 register_destination = PC + 4;
-                next_PC = register_source_1 + immediate;
+                next_PC = $signed(read_data_1) + $signed(immediate);
             end
             default: begin
                 next_PC = PC + 4;
@@ -314,10 +332,9 @@ module CHIP #(                                                                  
     end
 
     always @(*) begin //update rs1, rs2, rd, opcode
-        // opcode = i_IMEM_data[6:0];
         case (i_IMEM_data[6:0])
             7'b0110011: begin //R-type
-                $display("R-type");
+                // $display("R-type");
                 register_source_1 = i_IMEM_data[19:15];
                 register_source_2 = i_IMEM_data[24:20];
                 register_destination = i_IMEM_data[11:7];
@@ -325,7 +342,7 @@ module CHIP #(                                                                  
             end
             
             7'b1100111: begin //I-type (jalr)
-                $display("I-type");
+                // $display("I-type");
                 register_source_1 = i_IMEM_data[19:15];
                 register_source_2 = 0;
                 register_destination = i_IMEM_data[11:7];
@@ -333,7 +350,7 @@ module CHIP #(                                                                  
             end
 
             7'b0010011: begin //I-type (addi...)
-                $display("I-type (addi...)");
+                // $display("I-type (addi...)");
                 register_source_1 = i_IMEM_data[19:15];
                 register_source_2 = 0;
                 register_destination = i_IMEM_data[11:7];
@@ -341,7 +358,7 @@ module CHIP #(                                                                  
             end
 
             7'b0000011: begin //I-type (lw)
-                $display("I-type (lw)");
+                // $display("I-type (lw)");
                 register_source_1 = i_IMEM_data[19:15];
                 register_source_2 = 0;
                 register_destination = i_IMEM_data[11:7];
@@ -349,7 +366,7 @@ module CHIP #(                                                                  
             end
 
             7'b1110011: begin //I-type (Ecall)
-                $display("I-type (Ecall)");
+                // $display("I-type (Ecall)");
                 register_source_1 = i_IMEM_data[19:15];
                 register_source_2 = 0;
                 register_destination = i_IMEM_data[11:7];
@@ -357,7 +374,7 @@ module CHIP #(                                                                  
             end
 
             7'b0100011: begin //S-type
-                $display("S-type");
+                // $display("S-type");
                 register_source_1 = i_IMEM_data[19:15];
                 register_source_2 = i_IMEM_data[24:20];
                 register_destination = 0;
@@ -365,7 +382,7 @@ module CHIP #(                                                                  
             end
 
             7'b1100011: begin //SB-type
-                $display("SB-type");
+                // $display("SB-type");
                 register_source_1 = i_IMEM_data[19:15];
                 register_source_2 = i_IMEM_data[24:20];
                 register_destination = 0;
@@ -373,7 +390,7 @@ module CHIP #(                                                                  
             end
 
             7'b0010111: begin //U-type
-                $display("U-type");
+                // $display("U-type");
                 register_source_1 = 0;
                 register_source_2 = 0;
                 register_destination = i_IMEM_data[11:7];
@@ -381,11 +398,11 @@ module CHIP #(                                                                  
             end
 
             7'b1101111: begin //UJ-type
-                $display("UJ-type");
+                // $display("UJ-type");
                 register_source_1 = 0;
                 register_source_2 = 0;
                 register_destination = i_IMEM_data[11:7];
-                immediate = {i_IMEM_data[31], i_IMEM_data[19:12], i_IMEM_data[30:21], i_IMEM_data[20]};
+                immediate = {i_IMEM_data[31], i_IMEM_data[19:12], i_IMEM_data[20], i_IMEM_data[30:21]} << 1;
             end
 
             default: begin
@@ -525,57 +542,57 @@ module ALU #(
     always @(*) begin
         case (ALUOp)
             4'b0000: begin // add
-                $display("add:\t");
+                // $display("add:\t");
                 op = i_a + i_b;
                 done = 1'b1;
             end
             4'b0001: begin // sub
-                $display("sub:\t");
+                // $display("sub:\t");
                 op = i_a - i_b;
                 done = 1'b1;
             end
             4'b0010: begin // and
-                $display("and:\t");
+                // $display("and:\t");
                 op = i_a & i_b;
                 done = 1'b1;
             end
             4'b0011: begin // xor
-                $display("xor:\t");
+                // $display("xor:\t");
                 op = i_a ^ i_b;
                 done = 1'b1;
             end
             4'b0100: begin // slli
-                $display("slli:\t");
+                // $display("slli:\t");
                 op = i_a << i_b;
                 done = 1'b1;
             end
             4'b0101: begin // slti
-                $display("slti:\t");
+                // $display("slti:\t");
                 op = ($signed(i_a) < $signed(i_b)) ? {63'b0, 1'b1} : {63'b0, 1'b0};
                 done = 1'b1;
             end
             4'b0110: begin // srai
-                $display("srai:\t");
+                // $display("srai:\t");
                 op = i_a >>> i_b;
                 done = 1'b1;
             end
             4'b1001: begin //beq
-                $display("beq:\t");
+                // $display("beq:\t");
                 op = ((i_a - i_b) == 0) ? 1 : 0;
                 done = 1'b1;
             end
             4'b1010: begin //bge
-                $display("bge:\t");
+                // $display("bge:\t");
                 op = ((i_a - i_b) >= 0) ? 1 : 0;
                 done = 1'b1;
             end      
             4'b1011: begin //blt
-                $display("blt:\t");
+                // $display("blt:\t");
                 op = ((i_a - i_b) < 0) ? 1 : 0;
                 done = 1'b1;
             end
             4'b1100: begin //bne
-                $display("bne:\t");
+                // $display("bne:\t");
                 op = ((i_a - i_b) != 0) ? 1 : 0;
                 done = 1'b1;
             end
@@ -742,22 +759,17 @@ module ControlUnit(
                 regwrite = 1;
             end
 
-            // Jump instructions jal
+            // Jump instructions
             7'b1101111: begin
-                $display("Jump instructions (jal)");
-                branch = 2'b10;
-                memrnw = 0;
-                memtoreg = 0;
-                aluop = 4'b0000;
-                memwrite = 0;
-                alusrc = 0;
-                regwrite = 1;
-            end
-
-            // Jump instructions jalr
-            7'b1100111: begin
-                $display("Jump instructions (jalr)");
-                branch = 2'b11;
+                $display("Jump instructions");
+                case(func3)
+                    3'b000: begin
+                        branch = 2'b11;
+                    end
+                    default: begin
+                        branch = 2'b10;
+                    end
+                endcase
                 memrnw = 0;
                 memtoreg = 0;
                 aluop = 4'b0000;
@@ -827,7 +839,6 @@ module Cache#(
         input  [ADDR_W-1: 0] i_offset
     );
 
-
     assign o_cache_available = 0; // change this value to 1 if the cache is implemented
 
     //------------------------------------------//
@@ -841,8 +852,5 @@ module Cache#(
     //------------------------------------------//
 
     // Todo: BONUS
-    // reg declaration
-    reg [157:0] cache_block [0:18];
-    reg full, hit;
 
 endmodule
