@@ -246,18 +246,20 @@ module CHIP #(                                                                  
         //     end
         // endcase
     end
-
-    always @(*) begin //update PC address (MUX1)
-        state_nxt = 1;
+    always @(i_IMEM_data) begin
+        opcode = i_IMEM_data[6:0];
         if (o_IMEM_addr <= 65660) begin
             $display("==");
             $display("%b", i_IMEM_data[6:0]);
             $display("opc :%b", opcode);
             $display("rs1 :%d", register_source_1);
-            $display("rs1 :%d", register_source_2);
+            $display("rs2 :%d", register_source_2);
             $display("rd :%d", register_destination);
             $display("imm :%d", immediate);
         end
+    end
+    always @(*) begin //update PC address (MUX1)
+        state_nxt = 1;
         
         case (i_IMEM_data)
             32'h73: begin
@@ -312,7 +314,6 @@ module CHIP #(                                                                  
     end
 
     always @(*) begin //update rs1, rs2, rd, opcode
-        opcode = i_IMEM_data[6:0];
         case (i_IMEM_data[6:0])
             7'b0110011: begin //R-type
                 $display("R-type");
