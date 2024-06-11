@@ -247,7 +247,7 @@ module CHIP #(                                                                  
         // endcase
     end
     always @(i_IMEM_data) begin
-        opcode = i_IMEM_data[6:0];
+        // opcode = i_IMEM_data[6:0];
         if (o_IMEM_addr <= 65660) begin
             $display("==");
             $display("%b", i_IMEM_data[6:0]);
@@ -298,14 +298,14 @@ module CHIP #(                                                                  
                     jalop: begin
                         $display("jal");
                         register_destination = PC + 4;
-                        next_PC = register_source_1 + immediate;
+                        next_PC = PC + immediate;
                     end
                 endcase
             end
 
             2'b11: begin
                 register_destination = PC + 4;
-                next_PC = PC + immediate;
+                next_PC = register_source_1 + immediate;
             end
             default: begin
                 next_PC = PC + 4;
@@ -314,6 +314,7 @@ module CHIP #(                                                                  
     end
 
     always @(*) begin //update rs1, rs2, rd, opcode
+        // opcode = i_IMEM_data[6:0];
         case (i_IMEM_data[6:0])
             7'b0110011: begin //R-type
                 $display("R-type");
@@ -741,17 +742,22 @@ module ControlUnit(
                 regwrite = 1;
             end
 
-            // Jump instructions
+            // Jump instructions jal
             7'b1101111: begin
-                $display("Jump instructions");
-                case(func3)
-                    3'b000: begin
-                        branch = 2'b11;
-                    end
-                    default: begin
-                        branch = 2'b10;
-                    end
-                endcase
+                $display("Jump instructions (jal)");
+                branch = 2'b10;
+                memrnw = 0;
+                memtoreg = 0;
+                aluop = 4'b0000;
+                memwrite = 0;
+                alusrc = 0;
+                regwrite = 1;
+            end
+
+            // Jump instructions jalr
+            7'b1100111: begin
+                $display("Jump instructions (jalr)");
+                branch = 2'b11;
                 memrnw = 0;
                 memtoreg = 0;
                 aluop = 4'b0000;
@@ -821,6 +827,7 @@ module Cache#(
         input  [ADDR_W-1: 0] i_offset
     );
 
+
     assign o_cache_available = 0; // change this value to 1 if the cache is implemented
 
     //------------------------------------------//
@@ -834,5 +841,8 @@ module Cache#(
     //------------------------------------------//
 
     // Todo: BONUS
+    // reg declaration
+    reg [157:0] cache_block [0:18];
+    reg full, hit;
 
 endmodule
