@@ -651,6 +651,62 @@ module MULDIV_unit #(
     output                      o_done   // output valid signal
 
 );
+    reg  [  DATA_W-1: 0] operand_a, operand_a_nxt;
+    reg  [  DATA_W-1: 0] operand_b, operand_b_nxt;
+    reg  [  2*DATA_W: 0] result, result_nxt;    
+    reg  [         4: 0] counter, counter_nxt;
+    reg valid_signal, valid_signal_nxt;
+    
+    assign o_data = result;
+    assign o_done = valid_signal;
+
+    always @(*) begin
+            if (i_valid) begin
+                operand_a_nxt = i_A;
+                operand_b_nxt = i_B;
+            end
+            else begin
+                operand_a_nxt = operand_a;
+                operand_b_nxt = operand_b;
+            end
+
+    valid_signal_nxt = (counter == 31) ? 1 : 0;
+    result_nxt = (operand_b[counter]) ? (result + ({33'b0, operand_a} << counter)) : result;
+    end
+
+    always @(posedge i_clk or negedge i_rst_n) begin
+        if (!i_rst_n) begin
+            counter <= 0;
+        end 
+        else begin
+                counter <= counter + 1;
+        end
+    end
+    
+
+    // Todo: Sequential always block
+    always @(posedge i_clk or negedge i_rst_n) begin
+        if (!i_rst_n) begin
+            state       <= S_IDLE;
+            result      <= 0;
+            valid_signal <= 0;
+            operand_a   <= 0;
+            operand_b   <= 0;
+            inst        <= 0;
+        end
+        else begin
+            state       <= state_nxt;
+            result      <= result_nxt;
+            valid_signal <= valid_signal_nxt;
+            operand_a   <= operand_a_nxt;
+            operand_b   <= operand_b_nxt;
+            inst        <= inst_nxt;
+        end
+    end
+
+
+
+
 
 endmodule
 
