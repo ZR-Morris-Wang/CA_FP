@@ -210,9 +210,8 @@ module CHIP #(                                                                  
         .i_valid (ali),
         .i_A     (i_A_wire),
         .i_B     (i_B_wire),
-        .i_inst  (i_inst_wire),
         .o_data  (o_DMEM_addr),
-        .o_done  (alo),
+        .o_done  (alo)
     );
     ControlUnit cu0(
         .opcode  (opcode_w),
@@ -651,9 +650,9 @@ module MULDIV_unit #(
     output                      o_done   // output valid signal
 
 );
-    reg  [  DATA_W-1: 0] operand_a, operand_a_nxt;
-    reg  [  DATA_W-1: 0] operand_b, operand_b_nxt;
-    reg  [  2*DATA_W: 0] result, result_nxt;    
+    reg  [  BIT_W-1: 0] operand_a, operand_a_nxt;
+    reg  [  BIT_W-1: 0] operand_b, operand_b_nxt;
+    reg  [  2*BIT_W: 0] result, result_nxt;    
     reg  [         4: 0] counter, counter_nxt;
     reg valid_signal, valid_signal_nxt;
     
@@ -672,10 +671,11 @@ module MULDIV_unit #(
 
     valid_signal_nxt = (counter == 31) ? 1 : 0;
     result_nxt = (operand_b[counter]) ? (result + ({33'b0, operand_a} << counter)) : result;
+    result_nxt = (counter == 31) ? result_nxt[31:0] : result_nxt;
     end
 
     always @(posedge i_clk or negedge i_rst_n) begin
-        if (!i_rst_n) begin
+        if (!i_rst_n || i_valid) begin
             counter <= 0;
         end 
         else begin
@@ -686,21 +686,17 @@ module MULDIV_unit #(
 
     // Todo: Sequential always block
     always @(posedge i_clk or negedge i_rst_n) begin
-        if (!i_rst_n) begin
-            state       <= S_IDLE;
+        if (!i_rst_n || i_valid) begin
             result      <= 0;
             valid_signal <= 0;
             operand_a   <= 0;
             operand_b   <= 0;
-            inst        <= 0;
         end
         else begin
-            state       <= state_nxt;
             result      <= result_nxt;
             valid_signal <= valid_signal_nxt;
             operand_a   <= operand_a_nxt;
             operand_b   <= operand_b_nxt;
-            inst        <= inst_nxt;
         end
     end
 
