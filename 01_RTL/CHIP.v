@@ -176,6 +176,7 @@ module CHIP #(                                                                  
         //To o/p
         assign o_DMEM_cen = MemRnW;
         assign o_DMEM_wen = MemWrite;
+        assign o_DMEM_wdata = read_data_2;
     
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
 // Submoddules
