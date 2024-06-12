@@ -269,6 +269,7 @@ module CHIP #(                                                                  
             $display("odmemaddr :%b", o_DMEM_addr);
             $display("writedata :%b", write_data);
             $display("memtoreg :%b", MemtoReg);
+            $display("regwrite :%b", RegWrite);
         end
         // if (o_IMEM_addr == 65532 + 76 + 4) begin
         //     $display("--------------------------- %b ---------------------------", i_IMEM_data[6:0]);
@@ -283,8 +284,8 @@ module CHIP #(                                                                  
         //     $display("--------------------------- %b ---------------------------", state_nxt);
         //     $display("--------------------------- %b ---------------------------", o_IMEM_cen);
         // end
-    end
-    always @(*) begin //update PC address (MUX1)
+    // end
+    // always @(*) begin //update PC address (MUX1)
         
         case (i_IMEM_data)
             32'h73: begin
