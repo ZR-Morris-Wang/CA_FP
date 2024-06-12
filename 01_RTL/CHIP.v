@@ -299,7 +299,14 @@ module CHIP #(                                                                  
         case (Branch)
             2'b00: begin //no branch
                 // $display("no branch");
-                next_PC = PC + 4;
+                case (o_IMEM_cen)
+                    1'b0: begin
+                        next_PC = PC;
+                    end
+                    1'b1: begin
+                        next_PC = PC + 4;
+                    end
+                endcase
             end
 
             2'b01: begin //usual branch
@@ -424,6 +431,18 @@ module CHIP #(                                                                  
                 immediate = immediate;
             end
         endcase
+
+        case (MemtoReg)
+            0: begin
+                $display("no mtr == 0");
+                write_data = o_DMEM_addr; 
+            end
+            1: begin
+                $display("yes mtr == 1");
+                write_data = i_DMEM_rdata; 
+            end
+        endcase
+
     end
     
     always @(*) begin //update r_data_1, r_data_2
@@ -432,7 +451,6 @@ module CHIP #(                                                                  
     end
 
     always @(*) begin //update i_Breg (MUX2)
-        
         case (ALUSrc)
             0: begin
                 i_Breg = read_data_2; 
@@ -444,17 +462,7 @@ module CHIP #(                                                                  
     end
 
     always @(*) begin //update write_data (MUX3)
-        $display("memtoreg IN ANOTHER ALWSAYS BLOCK :%b", MemtoReg);
-        case (MemtoReg)
-            0: begin
-                $display("no mtr == 0");
-                write_data = o_DMEM_addr; 
-            end
-            1: begin
-                $display("yes mtr == 1");
-                write_data = i_DMEM_rdata; 
-            end
-        endcase
+        // $display("memtoreg IN ANOTHER ALWSAYS BLOCK :%b", MemtoReg);
     end
 
     always @(posedge i_clk or negedge i_rst_n) begin
@@ -795,7 +803,7 @@ module ControlUnit(
                 aluop = 4'b0000;
                 memwrite = 0;
                 alusrc = 0;
-                regwrite = 0;
+                regwrite = 1;
             end
 
             // Ecall instruction
