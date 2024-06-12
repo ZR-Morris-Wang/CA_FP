@@ -357,6 +357,8 @@ module CHIP #(                                                                  
                 register_source_2 = i_IMEM_data[24:20];
                 register_destination = i_IMEM_data[11:7];
                 immediate = 0;
+                func3 = i_IMEM_data[14:12];
+                func7 = i_IMEM_data[31:25];
             end
             
             7'b1100111: begin //I-type (jalr)
@@ -365,6 +367,7 @@ module CHIP #(                                                                  
                 register_source_2 = 0;
                 register_destination = i_IMEM_data[11:7];
                 immediate = i_IMEM_data[31:20];
+                func3 = i_IMEM_data[14:12];
             end
 
             7'b0010011: begin //I-type (addi...)
@@ -373,6 +376,7 @@ module CHIP #(                                                                  
                 register_source_2 = 0;
                 register_destination = i_IMEM_data[11:7];
                 immediate = i_IMEM_data[31:20];
+                func3 = i_IMEM_data[14:12];
             end
 
             7'b0000011: begin //I-type (lw)
@@ -381,6 +385,7 @@ module CHIP #(                                                                  
                 register_source_2 = 0;
                 register_destination = i_IMEM_data[11:7];
                 immediate = i_IMEM_data[31:20];
+                func3 = i_IMEM_data[14:12];
             end
 
             7'b1110011: begin //I-type (Ecall)
@@ -389,6 +394,7 @@ module CHIP #(                                                                  
                 register_source_2 = 0;
                 register_destination = i_IMEM_data[11:7];
                 immediate = 0;
+                func3 = i_IMEM_data[14:12];
             end
 
             7'b0100011: begin //S-type
@@ -397,6 +403,7 @@ module CHIP #(                                                                  
                 register_source_2 = i_IMEM_data[24:20];
                 register_destination = 0;
                 immediate = {i_IMEM_data[31:25], i_IMEM_data[11:7]};
+                func3 = i_IMEM_data[14:12];
             end
 
             7'b1100011: begin //SB-type
@@ -405,6 +412,7 @@ module CHIP #(                                                                  
                 register_source_2 = i_IMEM_data[24:20];
                 register_destination = 0;
                 immediate = {i_IMEM_data[31], i_IMEM_data[7], i_IMEM_data[30:25], i_IMEM_data[11:8]}  << 2;
+                func3 = i_IMEM_data[14:12];
             end
 
             7'b0010111: begin //U-type
