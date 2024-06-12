@@ -204,16 +204,16 @@ module CHIP #(                                                                  
         .o_data  (o_DMEM_addr),
         .o_done  (alo)
     );
-    // MULDIV_unit md0(
-    //     .i_clk   (i_clk),
-    //     .i_rst_n (i_rst_n),
-    //     .i_valid (),
-    //     .i_A     (i_A_wire),
-    //     .i_B     (i_B_wire),
-    //     .i_inst  (i_inst_wire),
-    //     .o_data  (o_DMEM_addr),
-    //     .o_done  (),
-    // );
+    MULDIV_unit md0(
+        .i_clk   (i_clk),
+        .i_rst_n (i_rst_n),
+        .i_valid (ali),
+        .i_A     (i_A_wire),
+        .i_B     (i_B_wire),
+        .i_inst  (i_inst_wire),
+        .o_data  (o_DMEM_addr),
+        .o_done  (alo),
+    );
     ControlUnit cu0(
         .opcode  (opcode_w),
         .func3   (func3_w),
@@ -634,49 +634,24 @@ module ALU #(
             end
         endcase
     end
+endmodule
 
-    // always @(posedge i_clk or negedge i_rst_n) begin
-    //     if(i_valid && !i_rst_n) begin
-    //         case (ALUOp)
-    //             4'b0000: begin // add
-    //                 o_data <= i_A + i_B;
-    //                 o_done <= 1;
-    //             end
-    //             4'b0001: begin // sub
-    //                 o_data <= i_A - i_B;
-    //                 o_done <= 1;
-    //             end
-    //             4'b0010: begin // and
-    //                 o_data <= i_A & i_B;
-    //                 o_done <= 1;
-    //             end
-    //             4'b0011: begin // xor
-    //                 o_data <= i_A ^ i_B;
-    //                 o_done <= 1;
-    //             end
-    //             4'b0100: begin // slli
-    //                 o_data <= i_A << i_B;
-    //                 o_done <= 1;
-    //             end
-    //             4'b0101: begin // slti
-    //                 o_data <= ($signed(i_A) < $signed(i_B)) ? {63'b0, 1'b1} : {63'b0, 1'b0};
-    //                 o_done <= 1;
-    //             end
-    //             4'b0110: begin // srai
-    //                 o_data <= i_A >>> i_B;
-    //                 o_done <= 1;
-    //             end
-    //             default: begin
-    //                 o_data <= 0;
-    //                 o_done <= 0;
-    //             end
-    //         endcase
-    //     end
-    //     else begin
-    //         o_data <= 0;
-    //         o_done <= 0;
-    //     end
-    // end
+module MULDIV_unit #(
+    parameter BIT_W = 32
+)(
+    input                       i_clk,   // clock
+    input                       i_rst_n, // reset
+
+    input                       i_valid, // input valid signal
+    input [BIT_W - 1 : 0]       i_A,     // input operand A
+    input [BIT_W - 1 : 0]       i_B,     // input operand B
+    input [        3 : 0]       ALUOp,  // instruction
+
+    output [2*BIT_W - 1 : 0]    o_data,  // output value
+    output                      o_done   // output valid signal
+
+);
+
 endmodule
 
 module ControlUnit(
