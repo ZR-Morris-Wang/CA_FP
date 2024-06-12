@@ -233,30 +233,42 @@ module CHIP #(                                                                  
     // Todo: any combinational/sequential circuit
     always @(*) begin
         
-        // case (i_DMEM_stall)
-        //     1'b1: begin
-        //         state_nxt = 1'b0;
-        //     end
-        //     1'b0: begin
-        //         state_nxt = 1'b1;
-        //     end
-        //     default: begin
-        //         $display("default");
-        //         state_nxt = 1'b1;
-        //     end
-        // endcase
+        case (i_DMEM_stall)
+            1'b1: begin
+                state_nxt = 1'b0;
+            end
+            1'b0: begin
+                state_nxt = 1'b1;
+            end
+            default: begin
+                state_nxt = 1'b1;
+            end
+        endcase
     end
-    always @(i_IMEM_data) begin
+    always @(*) begin
+        
         opcode = i_IMEM_data[6:0];
         $display("-=-=-==--=-=-=-=--=-=---=- %d -=-=-==--=-=-=-=--=-=---=-", o_IMEM_addr);
         if (o_IMEM_addr <= 65700) begin
-            $display("==");
+            $display("========================");
             $display("%b", i_IMEM_data[6:0]);
             $display("opc :%b", opcode);
-            $display("rs1 :%d", register_source_1);
-            $display("rs2 :%d", register_source_2);
-            $display("rd :%d", register_destination);
+            $display("rs1 :%d", rs1);
+            $display("rs2 :%d", rs2);
+            $display("rd :%d", rd);
+            $display("r_data1 :%d", rdata1);
+            $display("r_data2 :%d", rdata2);
             $display("imm :%d", immediate);
+            // $display("branch :%b", Branch);
+            $display("==============");
+            $display("alusrc :%b", ALUSrc);
+            $display("iawire :%b", i_A_wire);
+            $display("ibwire :%b", i_B_wire);
+            $display("ibreg :%b", i_Breg);
+            $display("aluop :%b", ALUOp);
+            $display("odmemaddr :%b", o_DMEM_addr);
+            $display("writedata :%b", write_data);
+            $display("memtoreg :%b", MemtoReg);
         end
         // if (o_IMEM_addr == 65532 + 76 + 4) begin
         //     $display("--------------------------- %b ---------------------------", i_IMEM_data[6:0]);
@@ -273,29 +285,25 @@ module CHIP #(                                                                  
         // end
     end
     always @(*) begin //update PC address (MUX1)
-        state_nxt = 1;
         
         case (i_IMEM_data)
             32'h73: begin
-                $display("ecall--------------------------");
                 ecallreg = 1;
             end
             default: begin
-                $display("no ecall--------------------------");
                 ecallreg = 0;
             end
         endcase
 
         case (Branch)
-            2'b00: begin
+            2'b00: begin //no branch
                 // $display("no branch");
                 next_PC = PC + 4;
             end
 
-            2'b01: begin
+            2'b01: begin //usual branch
                 case (o_DMEM_addr)
                     0: begin
-                        
                         next_PC = PC + ({i_IMEM_data[31], i_IMEM_data[7], i_IMEM_data[30:25], i_IMEM_data[11:8]} << 1);
                     end
                     default: begin
@@ -304,26 +312,27 @@ module CHIP #(                                                                  
                 endcase
             end
 
-            2'b10: begin
+            2'b10: begin //jal, aupic
+                // $display("--------------------------- hello world ---------------------------");
                 case (opcode)
-                    aupicop: begin 
-                        // $display("aupic");
-                        register_destination = PC + immediate;
+                    aupicop: begin
+                        write_data = $signed(PC) +$signed(immediate);
                         next_PC = PC + 4;
                     end
                     jalop: begin
-                        // $display("jal");
-                        
-                        register_destination = PC + 4;
-                        next_PC = $signed(PC) + $signed(immediate);
+                        write_data = PC + 4;
+                        next_PC = $signed(PC) + $signed(immediate); //OK
+                        // next_PC = PC + 4;
                     end
                 endcase
             end
 
-            2'b11: begin
-                $display("--------------------------- %b ---------------------------", read_data_1);
-                register_destination = PC + 4;
+            2'b11: begin //jalr
+                // $display("--------------------------- %b ---------------------------", read_data_1);
+                // $display("--------------------------- hello world ---------------------------");
+                // register_destination = PC + 4;
                 next_PC = $signed(read_data_1) + $signed(immediate);
+                // next_PC = PC + 4;
             end
             default: begin
                 next_PC = PC + 4;
@@ -395,6 +404,7 @@ module CHIP #(                                                                  
                 register_source_2 = 0;
                 register_destination = i_IMEM_data[11:7];
                 immediate = i_IMEM_data[31:12] << 12;
+                // $display("----------------------------------------------------immediate: %b", immediate);
             end
 
             7'b1101111: begin //UJ-type
@@ -421,23 +431,27 @@ module CHIP #(                                                                  
     end
 
     always @(*) begin //update i_Breg (MUX2)
+        
         case (ALUSrc)
             0: begin
-               i_Breg = read_data_2; 
+                i_Breg = read_data_2; 
             end
             1: begin
-               i_Breg = immediate; 
+                i_Breg = immediate; 
             end
         endcase
     end
 
     always @(*) begin //update write_data (MUX3)
+        $display("memtoreg IN ANOTHER ALWSAYS BLOCK :%b", MemtoReg);
         case (MemtoReg)
             0: begin
-               i_Breg = o_DMEM_addr; 
+                $display("no mtr == 0");
+                write_data = o_DMEM_addr; 
             end
             1: begin
-               i_Breg = i_DMEM_rdata; 
+                $display("yes mtr == 1");
+                write_data = i_DMEM_rdata; 
             end
         endcase
     end
@@ -445,7 +459,7 @@ module CHIP #(                                                                  
     always @(posedge i_clk or negedge i_rst_n) begin
         if (!i_rst_n) begin
             PC <= 32'h00010000; // Do not modify this value!!!
-            state <= 1'b0;
+            state <= 1'b1;
         end
         else begin
             PC <= next_PC;
@@ -759,23 +773,28 @@ module ControlUnit(
                 regwrite = 1;
             end
 
-            // Jump instructions
+            // Jal instructions
             7'b1101111: begin
                 $display("Jump instructions");
-                case(func3)
-                    3'b000: begin
-                        branch = 2'b11;
-                    end
-                    default: begin
-                        branch = 2'b10;
-                    end
-                endcase
+                branch = 2'b10;
                 memrnw = 0;
                 memtoreg = 0;
                 aluop = 4'b0000;
                 memwrite = 0;
                 alusrc = 0;
                 regwrite = 1;
+            end
+
+            // Jalr instructions
+            7'b1100111: begin
+                $display("jalr instruction");
+                branch = 2'b11;
+                memrnw = 0;
+                memtoreg = 0;
+                aluop = 4'b0000;
+                memwrite = 0;
+                alusrc = 0;
+                regwrite = 0;
             end
 
             // Ecall instruction
@@ -789,6 +808,8 @@ module ControlUnit(
                 alusrc = 0;
                 regwrite = 0;
             end
+
+            // aupic instruction
             aupicop: begin
                 $display("Aupic");
                 branch = 2'b10;
@@ -796,9 +817,10 @@ module ControlUnit(
                 memtoreg = 0;
                 aluop = 4'b0000;
                 memwrite = 0;
-                alusrc = 0;
+                alusrc = 1;
                 regwrite = 1;
             end
+
             default: begin
                 branch = 2'b00;
                 memrnw = 0;
