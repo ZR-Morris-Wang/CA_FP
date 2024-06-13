@@ -107,8 +107,8 @@ module CHIP #(                                                                  
         reg ecallreg;
         
         //w/ dmem
-        reg dmem_cen, dmem_cen_nxt;
-        reg dmem_wen, dmem_wen_nxt;
+        reg dmem_cen;
+        reg dmem_wen;
 
         //Reg_file
         reg [4:0] register_source_1, register_source_2, register_destination; //I
@@ -135,13 +135,15 @@ module CHIP #(                                                                  
         
         //ALU/MULDIV
         reg [BIT_W - 1:0] i_Breg;
+        reg [BIT_W - 1:0] final_op;
+        reg mul_en, mul_valid;
         wire [BIT_W - 1:0] i_A_wire, i_B_wire;
+        wire [BIT_W - 1:0] o_ALU_wire, o_MULDIV_wire;
+        wire mul_valid_wire, mul_done;
 
         //state
         reg state, state_nxt;
 
-        wire ali;
-        wire alo;
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
 // Continuous Assignment
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -172,11 +174,13 @@ module CHIP #(                                                                  
         //ALU/MULDIV
         assign i_A_wire = read_data_1;
         assign i_B_wire = i_Breg;
+        assign mul_valid_wire = mul_valid;
 
         //To o/p
         assign o_DMEM_cen = MemRnW;
         assign o_DMEM_wen = MemWrite;
         assign o_DMEM_wdata = read_data_2;
+        assign o_DMEM_addr = final_op;
     
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
 // Submoddules
@@ -197,21 +201,19 @@ module CHIP #(                                                                  
     ALU alu0(
         .i_clk   (i_clk),
         .i_rst_n (i_rst_n),
-        .i_valid (ali),
         .i_A     (i_A_wire),
         .i_B     (i_B_wire),
         .ALUOp  (ALUOp),
-        .o_data  (o_DMEM_addr),
-        .o_done  (alo)
+        .o_data  (o_ALU_wire)
     );
     MULDIV_unit md0(
         .i_clk   (i_clk),
         .i_rst_n (i_rst_n),
-        .i_valid (ali),
+        .i_valid (mul_valid_wire),
         .i_A     (i_A_wire),
         .i_B     (i_B_wire),
-        .o_data  (o_DMEM_addr),
-        .o_done  (alo)
+        .o_data  (o_MULDIV_wire),
+        .o_done  (mul_done)
     );
     ControlUnit cu0(
         .opcode  (opcode_w),
@@ -232,44 +234,51 @@ module CHIP #(                                                                  
     
     // Todo: any combinational/sequential circuit
     always @(*) begin
-        
-        case (i_DMEM_stall)
-            1'b1: begin
-                state_nxt = 1'b0;
-            end
-            1'b0: begin
-                state_nxt = 1'b1;
-            end
-            default: begin
-                state_nxt = 1'b1;
-            end
-        endcase
+        if (i_DMEM_stall || mul_valid) begin
+            state_nxt = 1'b0;
+        end
+        else begin
+            state_nxt = 1'b1;
+        end
+        // if (i_DMEM_stall) begin
+        //     state_nxt = 1'b0;
+        // end
+        //     // else if (negedge i_valid) begin
+        //     //     state_nxt = 1'b0;
+        //     // end
+        //     // else if (posedge o_done) begin
+        //     //     state_nxt = 1'b1;
+        //     // end
+        // else begin
+        //     state_nxt = state;
+        // end
     end
+
     always @(*) begin
         
         opcode = i_IMEM_data[6:0];
         $display("-=-=-==--=-=-=-=--=-=---=- %d -=-=-==--=-=-=-=--=-=---=-", o_IMEM_addr);
         if (o_IMEM_addr <= 65700) begin
-            $display("========================");
-            $display("%b", i_IMEM_data[6:0]);
-            $display("opc :%b", opcode);
-            $display("rs1 :%d", rs1);
-            $display("rs2 :%d", rs2);
-            $display("rd :%d", rd);
-            $display("r_data1 :%d", rdata1);
-            $display("r_data2 :%d", rdata2);
-            $display("imm :%d", immediate);
+            // $display("========================");
+            // $display("%b", i_IMEM_data[6:0]);
+            // $display("opc :%b", opcode);
+            // $display("rs1 :%d", rs1);
+            // $display("rs2 :%d", rs2);
+            // $display("rd :%d", rd);
+            // $display("r_data1 :%d", rdata1);
+            // $display("r_data2 :%d", rdata2);
+            // $display("imm :%d", immediate);
             // $display("branch :%b", Branch);
-            $display("==============");
-            $display("alusrc :%b", ALUSrc);
-            $display("iawire :%b", i_A_wire);
-            $display("ibwire :%b", i_B_wire);
-            $display("ibreg :%b", i_Breg);
-            $display("aluop :%b", ALUOp);
-            $display("odmemaddr :%b", o_DMEM_addr);
-            $display("writedata :%b", write_data);
-            $display("memtoreg :%b", MemtoReg);
-            $display("regwrite :%b", RegWrite);
+            // $display("==============");
+            // $display("alusrc :%b", ALUSrc);
+            // $display("iawire :%b", i_A_wire);
+            // $display("ibwire :%b", i_B_wire);
+            // $display("ibreg :%b", i_Breg);
+            // $display("aluop :%b", ALUOp);
+            // $display("odmemaddr :%b", o_DMEM_addr);
+            // $display("writedata :%b", write_data);
+            // $display("memtoreg :%b", MemtoReg);
+            // $display("regwrite :%b", RegWrite);
         end
         // if (o_IMEM_addr == 65532 + 76 + 4) begin
         //     $display("--------------------------- %b ---------------------------", i_IMEM_data[6:0]);
@@ -324,11 +333,11 @@ module CHIP #(                                                                  
                 // $display("--------------------------- hello world ---------------------------");
                 case (opcode)
                     aupicop: begin
-                        write_data = $signed(PC) +$signed(immediate);
+                        // write_data = $signed(PC) +$signed(immediate);
                         next_PC = PC + 4;
                     end
                     jalop: begin
-                        write_data = PC + 4;
+                        // write_data = PC + 4;
                         next_PC = $signed(PC) + $signed(immediate); //OK
                         // next_PC = PC + 4;
                     end
@@ -440,14 +449,27 @@ module CHIP #(                                                                  
             end
         endcase
 
-        case (MemtoReg)
+        case (MemtoReg) //update write_data (MUX3)
             0: begin
-                $display("no mtr == 0");
-                write_data = o_DMEM_addr; 
+                // $display("no mtr == 0");
+                case (opcode) 
+                    aupicop: begin
+                        write_data = $signed(PC) +$signed(immediate);
+                    end
+                    jalop: begin
+                        write_data = PC + 4;
+                    end
+                    default: begin
+                    write_data = o_DMEM_addr; 
+                    end
+                endcase                        
             end
             1: begin
-                $display("yes mtr == 1");
+                // $display("yes mtr == 1");
                 write_data = i_DMEM_rdata; 
+            end
+            default: begin
+                write_data = 0;
             end
         endcase
 
@@ -469,8 +491,32 @@ module CHIP #(                                                                  
         endcase
     end
 
-    always @(*) begin //update write_data (MUX3)
-        // $display("memtoreg IN ANOTHER ALWSAYS BLOCK :%b", MemtoReg);
+    always @(*) begin 
+        case (opcode)
+            7'b0000001: begin
+                mul_en = 1'b1;
+            end
+            default begin
+                mul_en = 1'b0;
+            end
+        endcase
+    end
+
+    always @(*) begin //choose which output to be used (MUX3)
+        case (mul_en)
+            1'b1: begin
+                final_op = o_MULDIV_wire;
+                mul_valid = 1'b1;
+            end
+            1'b0: begin
+                final_op = o_ALU_wire;
+                mul_valid = 1'b0;
+            end
+            default: begin
+                final_op = o_ALU_wire;
+                mul_valid = 1'b0;
+            end
+        endcase
     end
 
     always @(posedge i_clk or negedge i_rst_n) begin
@@ -538,98 +584,70 @@ module ALU #(
     input                       i_clk,   // clock
     input                       i_rst_n, // reset
 
-    input                       i_valid, // input valid signal
     input [BIT_W - 1 : 0]       i_A,     // input operand A
     input [BIT_W - 1 : 0]       i_B,     // input operand B
     input [        3 : 0]       ALUOp,  // instruction
 
-    output [2*BIT_W - 1 : 0]    o_data,  // output value
-    output                      o_done   // output valid signal
+    output [2*BIT_W - 1 : 0]    o_data  // output value
 
 );
     reg  [ BIT_W-1: 0 ] i_a;
     reg  [ BIT_W-1: 0 ] i_b;
     reg  [ 3: 0 ] aluop;
     reg  [ 2 * BIT_W-1: 0] op;
-    reg done;
 
-    assign i_valid = 1;
     assign o_data = op;
-    assign o_done = done;
 
     always @(*) begin
-        if (i_valid) begin
-            i_a = i_A;
-            i_b = i_B;
-            aluop = ALUOp;
-        end
-        else begin
-            i_a = i_a;
-            i_b = i_b;
-            aluop = aluop;
-        end
-    end
-
-    always @(*) begin
+        i_a = i_A;
+        i_b = i_B;
         case (ALUOp)
             4'b0000: begin // add
                 // $display("add:\t");
                 op = i_a + i_b;
-                done = 1'b1;
             end
             4'b0001: begin // sub
                 // $display("sub:\t");
                 op = i_a - i_b;
-                done = 1'b1;
             end
             4'b0010: begin // and
                 // $display("and:\t");
                 op = i_a & i_b;
-                done = 1'b1;
             end
             4'b0011: begin // xor
                 // $display("xor:\t");
                 op = i_a ^ i_b;
-                done = 1'b1;
             end
             4'b0100: begin // slli
                 // $display("slli:\t");
                 op = i_a << i_b;
-                done = 1'b1;
             end
             4'b0101: begin // slti
                 // $display("slti:\t");
                 op = ($signed(i_a) < $signed(i_b)) ? {63'b0, 1'b1} : {63'b0, 1'b0};
-                done = 1'b1;
             end
             4'b0110: begin // srai
                 // $display("srai:\t");
                 op = i_a >>> i_b;
-                done = 1'b1;
             end
             4'b1001: begin //beq
                 // $display("beq:\t");
                 op = ((i_a - i_b) == 0) ? 1 : 0;
-                done = 1'b1;
             end
             4'b1010: begin //bge
                 // $display("bge:\t");
                 op = ((i_a - i_b) >= 0) ? 1 : 0;
-                done = 1'b1;
             end      
             4'b1011: begin //blt
                 // $display("blt:\t");
                 op = ((i_a - i_b) < 0) ? 1 : 0;
-                done = 1'b1;
             end
             4'b1100: begin //bne
                 // $display("bne:\t");
                 op = ((i_a - i_b) != 0) ? 1 : 0;
-                done = 1'b1;
             end
             default: begin
                 op = 0;
-                done = 1'b0;
             end
         endcase
     end
@@ -660,7 +678,7 @@ module MULDIV_unit #(
     assign o_done = valid_signal;
 
     always @(*) begin
-            if (i_valid) begin
+            if (i_valid && counter === 0) begin
                 operand_a_nxt = i_A;
                 operand_b_nxt = i_B;
             end
@@ -686,7 +704,7 @@ module MULDIV_unit #(
 
     // Todo: Sequential always block
     always @(posedge i_clk or negedge i_rst_n) begin
-        if (!i_rst_n || i_valid) begin
+        if (!i_rst_n || (i_valid && counter === 0) ) begin
             result      <= 0;
             valid_signal <= 0;
             operand_a   <= 0;
@@ -699,11 +717,6 @@ module MULDIV_unit #(
             operand_b   <= operand_b_nxt;
         end
     end
-
-
-
-
-
 endmodule
 
 module ControlUnit(
