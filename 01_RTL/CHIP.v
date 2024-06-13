@@ -114,7 +114,7 @@ module CHIP #(                                                                  
         reg [4:0] register_source_1, register_source_2, register_destination; //I
         reg [BIT_W-1: 0] write_data; //I
         reg [BIT_W-1: 0] read_data_1, read_data_2; //O
-        reg [19:0] immediate;
+        reg [31:0] immediate;
 
         wire [4:0] rs1, rs2, rd;
         wire [BIT_W-1: 0] wdata;
@@ -253,10 +253,12 @@ module CHIP #(                                                                  
         //     state_nxt = state;
         // end
     end
-
+    always @(*) begin
+        opcode = i_IMEM_data[6:0];
+    end
     always @(*) begin
         
-        opcode = i_IMEM_data[6:0];
+        
         $display("-=-=-==--=-=-=-=--=-=---=- %d -=-=-==--=-=-=-=--=-=---=-", o_IMEM_addr);
         if (o_IMEM_addr <= 65700) begin
             // $display("========================");
@@ -320,7 +322,7 @@ module CHIP #(                                                                  
 
             2'b01: begin //usual branch
                 case (o_DMEM_addr)
-                    0: begin
+                    1: begin
                         next_PC = PC + ({i_IMEM_data[31], i_IMEM_data[7], i_IMEM_data[30:25], i_IMEM_data[11:8]} << 1);
                     end
                     default: begin
@@ -374,7 +376,7 @@ module CHIP #(                                                                  
                 register_source_1 = i_IMEM_data[19:15];
                 register_source_2 = 0;
                 register_destination = i_IMEM_data[11:7];
-                immediate = i_IMEM_data[31:20];
+                immediate = $signed(i_IMEM_data[31:20]);
                 func3 = i_IMEM_data[14:12];
             end
 
@@ -383,7 +385,7 @@ module CHIP #(                                                                  
                 register_source_1 = i_IMEM_data[19:15];
                 register_source_2 = 0;
                 register_destination = i_IMEM_data[11:7];
-                immediate = i_IMEM_data[31:20];
+                immediate = $signed(i_IMEM_data[31:20]);
                 func3 = i_IMEM_data[14:12];
             end
 
@@ -392,7 +394,7 @@ module CHIP #(                                                                  
                 register_source_1 = i_IMEM_data[19:15];
                 register_source_2 = 0;
                 register_destination = i_IMEM_data[11:7];
-                immediate = i_IMEM_data[31:20];
+                immediate = $signed(i_IMEM_data[31:20]);
                 func3 = i_IMEM_data[14:12];
             end
 
@@ -410,7 +412,7 @@ module CHIP #(                                                                  
                 register_source_1 = i_IMEM_data[19:15];
                 register_source_2 = i_IMEM_data[24:20];
                 register_destination = 0;
-                immediate = {i_IMEM_data[31:25], i_IMEM_data[11:7]};
+                immediate = $signed({i_IMEM_data[31:25], i_IMEM_data[11:7]});
                 func3 = i_IMEM_data[14:12];
             end
 
@@ -419,7 +421,7 @@ module CHIP #(                                                                  
                 register_source_1 = i_IMEM_data[19:15];
                 register_source_2 = i_IMEM_data[24:20];
                 register_destination = 0;
-                immediate = {i_IMEM_data[31], i_IMEM_data[7], i_IMEM_data[30:25], i_IMEM_data[11:8]}  << 2;
+                immediate = $signed({i_IMEM_data[31], i_IMEM_data[7], i_IMEM_data[30:25], i_IMEM_data[11:8]}  << 2);
                 func3 = i_IMEM_data[14:12];
             end
 
@@ -428,7 +430,7 @@ module CHIP #(                                                                  
                 register_source_1 = 0;
                 register_source_2 = 0;
                 register_destination = i_IMEM_data[11:7];
-                immediate = i_IMEM_data[31:12] << 12;
+                immediate = $signed(i_IMEM_data[31:12] << 12);
                 // $display("----------------------------------------------------immediate: %b", immediate);
             end
 
@@ -437,7 +439,7 @@ module CHIP #(                                                                  
                 register_source_1 = 0;
                 register_source_2 = 0;
                 register_destination = i_IMEM_data[11:7];
-                immediate = {i_IMEM_data[31], i_IMEM_data[19:12], i_IMEM_data[20], i_IMEM_data[30:21]} << 1;
+                immediate = $signed({i_IMEM_data[31], i_IMEM_data[19:12], i_IMEM_data[20], i_IMEM_data[30:21]} << 1);
             end
 
             default: begin
@@ -445,7 +447,7 @@ module CHIP #(                                                                  
                 register_source_1 = register_source_1;
                 register_source_2 = register_source_2;
                 register_destination = register_destination;
-                immediate = immediate;
+                immediate = $signed(immediate);
             end
         endcase
 
@@ -604,11 +606,11 @@ module ALU #(
         case (ALUOp)
             4'b0000: begin // add
                 // $display("add:\t");
-                op = i_a + i_b;
+                op = $signed(i_a) + $signed(i_b);
             end
             4'b0001: begin // sub
                 // $display("sub:\t");
-                op = i_a - i_b;
+                op = $signed(i_a) - $signed(i_b);
             end
             4'b0010: begin // and
                 // $display("and:\t");
@@ -733,7 +735,7 @@ module ControlUnit(
 );
     reg memrnw, memtoreg, memwrite, alusrc, regwrite;
     reg [1:0] branch;
-    reg [2:0] aluop;
+    reg [3:0] aluop;
 
     assign Branch = branch;
     assign MemRnW = memrnw;
@@ -807,7 +809,13 @@ module ControlUnit(
                 branch = 2'b01;
                 memrnw = 0;
                 memtoreg = 0;
-                aluop = 4'b1111;
+                case (func3)
+                    3'b000: aluop = 4'b1001; // beq
+                    3'b101: aluop = 4'b1010; // bge
+                    3'b100: aluop = 4'b1011; // blt
+                    3'b001: aluop = 4'b1100; // bne
+                    default: aluop = 4'b0000;
+                endcase
                 memwrite = 0;
                 alusrc = 0;
                 regwrite = 0;
