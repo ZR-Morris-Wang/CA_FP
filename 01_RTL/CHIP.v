@@ -136,7 +136,7 @@ module CHIP #(                                                                  
         //ALU/MULDIV
         reg [BIT_W - 1:0] i_Breg;
         reg [BIT_W - 1:0] final_op;
-        reg mul_en, mul_valid;
+        reg mul_en, mul_en_old, mul_valid, mul_valid_next;
         wire [BIT_W - 1:0] i_A_wire, i_B_wire;
         wire [BIT_W - 1:0] o_ALU_wire, o_MULDIV_wire;
         wire mul_valid_wire, mul_done;
@@ -234,7 +234,7 @@ module CHIP #(                                                                  
     
     // Todo: any combinational/sequential circuit
     always @(*) begin
-        if (i_DMEM_stall || mul_valid) begin
+        if (i_DMEM_stall || mul_en) begin
             state_nxt = 1'b0;
         end
         else begin
@@ -495,7 +495,7 @@ module CHIP #(                                                                  
 
     always @(*) begin 
         case (opcode)
-            7'b0000001: begin
+            7'b0110011: begin
                 mul_en = 1'b1;
             end
             default begin
@@ -508,20 +508,18 @@ module CHIP #(                                                                  
         case (mul_en)
             1'b1: begin
                 final_op = o_MULDIV_wire;
-                mul_valid = 1'b1;
             end
             1'b0: begin
                 final_op = o_ALU_wire;
-                mul_valid = 1'b0;
             end
             default: begin
                 final_op = o_ALU_wire;
-                mul_valid = 1'b0;
             end
         endcase
     end
 
     always @(posedge i_clk or negedge i_rst_n) begin
+        mul_en_old <= mul_en;
         if (!i_rst_n) begin
             PC <= 32'h00010000; // Do not modify this value!!!
             state <= 1'b1;
@@ -530,8 +528,13 @@ module CHIP #(                                                                  
             PC <= next_PC;
             state <= state_nxt;
         end
+        if ( !mul_en_old && mul_en ) begin
+            mul_valid <= 1;
+        end
+        else begin
+            mul_valid <= 0;
+        end
     end
-
 endmodule
 
 
@@ -699,14 +702,14 @@ module MULDIV_unit #(
             counter <= 0;
         end 
         else begin
-                counter <= counter + 1;
+            counter <= counter + 1;
         end
     end
     
 
     // Todo: Sequential always block
     always @(posedge i_clk or negedge i_rst_n) begin
-        if (!i_rst_n || (i_valid && counter === 0) ) begin
+        if (!i_rst_n ) begin
             result      <= 0;
             valid_signal <= 0;
             operand_a   <= 0;
