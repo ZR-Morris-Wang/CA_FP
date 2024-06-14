@@ -136,10 +136,12 @@ module CHIP #(                                                                  
         //ALU/MULDIV
         reg [BIT_W - 1:0] i_Breg;
         reg [BIT_W - 1:0] final_op;
-        reg mul_en, mul_en_old, mul_valid, mul_valid_next;
+        reg mul_en, mul_en_old;
+        reg mul_valid, mul_counter_valid;
+        reg mul_done_reg, mul_done_reg_old;
         wire [BIT_W - 1:0] i_A_wire, i_B_wire;
         wire [BIT_W - 1:0] o_ALU_wire, o_MULDIV_wire;
-        wire mul_valid_wire, mul_done;
+        wire mul_valid_wire, mul_counter_valid_wire, mul_done;
 
         //state
         reg state, state_nxt;
@@ -175,6 +177,7 @@ module CHIP #(                                                                  
         assign i_A_wire = read_data_1;
         assign i_B_wire = i_Breg;
         assign mul_valid_wire = mul_valid;
+        assign mul_counter_valid_wire = mul_counter_valid;
 
         //To o/p
         assign o_DMEM_cen = MemRnW;
@@ -212,7 +215,7 @@ module CHIP #(                                                                  
         .i_valid (mul_valid_wire),
         .i_A     (i_A_wire),
         .i_B     (i_B_wire),
-        .i_counter_valid(mul_en),
+        .i_counter_valid(mul_counter_valid_wire),
         .o_data  (o_MULDIV_wire),
         .o_done  (mul_done)
     );
@@ -386,8 +389,14 @@ module CHIP #(                                                                  
                 register_source_1 = i_IMEM_data[19:15];
                 register_source_2 = 0;
                 register_destination = i_IMEM_data[11:7];
-                immediate = $signed(i_IMEM_data[31:20]);
+                
                 func3 = i_IMEM_data[14:12];
+                case (func3) 
+                    3'b000: immediate = $signed(i_IMEM_data[31:20]); //addi
+                    3'b010: immediate = $signed(i_IMEM_data[31:20]); //slti
+                    3'b001: immediate = $signed(i_IMEM_data[24:20]); //slli
+                    3'b101: immediate = $signed(i_IMEM_data[24:20]); //srli
+                endcase
             end
 
             7'b0000011: begin //I-type (lw)
@@ -422,7 +431,7 @@ module CHIP #(                                                                  
                 register_source_1 = i_IMEM_data[19:15];
                 register_source_2 = i_IMEM_data[24:20];
                 register_destination = 0;
-                immediate = $signed({i_IMEM_data[31], i_IMEM_data[7], i_IMEM_data[30:25], i_IMEM_data[11:8]}  << 2);
+                immediate = $signed({i_IMEM_data[31], i_IMEM_data[7], i_IMEM_data[30:25], i_IMEM_data[11:8]}  << 1);
                 func3 = i_IMEM_data[14:12];
             end
 
@@ -481,6 +490,7 @@ module CHIP #(                                                                  
     always @(*) begin //update r_data_1, r_data_2
         read_data_1 = rdata1;
         read_data_2 = rdata2;
+        mul_done_reg = mul_done;
     end
 
     always @(*) begin //update i_Breg (MUX2)
@@ -519,15 +529,26 @@ module CHIP #(                                                                  
         endcase
     end
     always @(*) begin
-        if ( !mul_en_old && mul_en ) begin
+        if ( (!mul_en_old && mul_en) || (mul_done_reg_old && !mul_done_reg) ) begin
             mul_valid = 1;
+
         end
         else begin
             mul_valid = 0;
         end
     end
+    always @(*) begin
+        if ( mul_en && !mul_done_reg ) begin
+            mul_counter_valid = 1;
+
+        end
+        else begin
+            mul_counter_valid = 0;
+        end
+    end
     always @(posedge i_clk or negedge i_rst_n) begin
         mul_en_old <= mul_en;
+        mul_done_reg_old <= mul_done_reg;
         if (!i_rst_n) begin
             PC <= 32'h00010000; // Do not modify this value!!!
             state <= 1'b1;
@@ -610,7 +631,7 @@ module ALU #(
         i_a = i_A;
         i_b = i_B;
         case (ALUOp)
-            4'b0000: begin // add
+            4'b0000: begin // add, addi
                 // $display("add:\t");
                 op = $signed(i_a) + $signed(i_b);
             end
@@ -640,19 +661,19 @@ module ALU #(
             end
             4'b1001: begin //beq
                 // $display("beq:\t");
-                op = ((i_a - i_b) == 0) ? 1 : 0;
+                op = (($signed(i_a) - $signed(i_b)) == 0) ? 1 : 0;
             end
             4'b1010: begin //bge
                 // $display("bge:\t");
-                op = ((i_a - i_b) >= 0) ? 1 : 0;
+                op = (($signed(i_a) - $signed(i_b)) >= 0) ? 1 : 0;
             end      
             4'b1011: begin //blt
                 // $display("blt:\t");
-                op = ((i_a - i_b) < 0) ? 1 : 0;
+                op = (($signed(i_a) - $signed(i_b)) < 0) ? 1 : 0;
             end
             4'b1100: begin //bne
                 // $display("bne:\t");
-                op = ((i_a - i_b) != 0) ? 1 : 0;
+                op = (($signed(i_a) - $signed(i_b)) != 0) ? 1 : 0;
             end
             default: begin
                 op = 0;
