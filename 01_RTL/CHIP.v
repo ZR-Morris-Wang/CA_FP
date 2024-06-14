@@ -234,11 +234,11 @@ module CHIP #(                                                                  
     
     // Todo: any combinational/sequential circuit
     always @(*) begin
-        if (i_DMEM_stall || mul_en) begin
-            state_nxt = 1'b0;
+        if ( ( !i_DMEM_stall && !mul_en) || (!i_DMEM_stall && mul_done) ) begin //from Kmap don't ask me why
+            state_nxt = 1'b1;
         end
         else begin
-            state_nxt = 1'b1;
+            state_nxt = 1'b0;
         end
         // if (i_DMEM_stall) begin
         //     state_nxt = 1'b0;
@@ -683,20 +683,24 @@ module MULDIV_unit #(
     assign o_done = valid_signal;
 
     always @(*) begin
-            if (i_valid && counter === 0) begin
-                operand_a_nxt = i_A;
-                operand_b_nxt = i_B;
-            end
-            else begin
-                operand_a_nxt = operand_a;
-                operand_b_nxt = operand_b;
-            end
+        if (i_valid && counter === 0) begin
+            operand_a_nxt = i_A;
+            operand_b_nxt = i_B;
+        end
+        else begin
+            operand_a_nxt = operand_a;
+            operand_b_nxt = operand_b;
+        end
 
     valid_signal_nxt = (counter == 31) ? 1 : 0;
     result_nxt = (operand_b[counter]) ? (result + ({33'b0, operand_a} << counter)) : result;
     result_nxt = (counter == 31) ? result_nxt[31:0] : result_nxt;
     end
-
+    
+    // always @(posedge valid_signal) begin
+    //     mul_en <= 0;
+    // end
+    
     always @(posedge i_clk or negedge i_rst_n) begin
         if (!i_rst_n || i_valid) begin
             counter <= 0;
