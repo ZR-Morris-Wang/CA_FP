@@ -237,71 +237,21 @@ module CHIP #(                                                                  
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
     
     // Todo: any combinational/sequential circuit
-    always @(*) begin
-        if ( ( !i_DMEM_stall && !mul_en) || (!i_DMEM_stall && mul_done) ) begin //from Kmap don't ask me why
+
+    always @(*) begin //get opcode
+        opcode = i_IMEM_data[6:0];
+    end
+
+    always @(*) begin //knowing if instuctions should be read
+        if ( ( !i_DMEM_stall && !mul_en) || mul_done ) begin //from Kmap
             state_nxt = 1'b1;
         end
         else begin
             state_nxt = 1'b0;
         end
-        // if (i_DMEM_stall) begin
-        //     state_nxt = 1'b0;
-        // end
-        //     // else if (negedge i_valid) begin
-        //     //     state_nxt = 1'b0;
-        //     // end
-        //     // else if (posedge o_done) begin
-        //     //     state_nxt = 1'b1;
-        //     // end
-        // else begin
-        //     state_nxt = state;
-        // end
     end
-    always @(*) begin
-        opcode = i_IMEM_data[6:0];
-    end
-    always @(*) begin
-        
-        
-        $display("-=-=-==--=-=-=-=--=-=---=- %d -=-=-==--=-=-=-=--=-=---=-", o_IMEM_addr);
-        if (o_IMEM_addr <= 65700) begin
-            // $display("========================");
-            // $display("%b", i_IMEM_data[6:0]);
-            // $display("opc :%b", opcode);
-            // $display("rs1 :%d", rs1);
-            // $display("rs2 :%d", rs2);
-            // $display("rd :%d", rd);
-            // $display("r_data1 :%d", rdata1);
-            // $display("r_data2 :%d", rdata2);
-            // $display("imm :%d", immediate);
-            // $display("branch :%b", Branch);
-            // $display("==============");
-            // $display("alusrc :%b", ALUSrc);
-            // $display("iawire :%b", i_A_wire);
-            // $display("ibwire :%b", i_B_wire);
-            // $display("ibreg :%b", i_Breg);
-            // $display("aluop :%b", ALUOp);
-            // $display("odmemaddr :%b", o_DMEM_addr);
-            // $display("writedata :%b", write_data);
-            // $display("memtoreg :%b", MemtoReg);
-            // $display("regwrite :%b", RegWrite);
-        end
-        // if (o_IMEM_addr == 65532 + 76 + 4) begin
-        //     $display("--------------------------- %b ---------------------------", i_IMEM_data[6:0]);
-        //     $display("--------------------------- %b ---------------------------", opcode);
-        // end
-        // if (o_IMEM_addr == 65532 + 76 + 8) begin
-        //     $display("-----------------++-------- %b ---------------------------", i_IMEM_data[6:0]);
-        //     $display("-----------------++-------- %b ---------------------------", opcode);
-        // end
-        // if (i_IMEM_data[6:0] == 7'b1101111) begin
-        //     $display("--------------------------- %b ---------------------------", state);
-        //     $display("--------------------------- %b ---------------------------", state_nxt);
-        //     $display("--------------------------- %b ---------------------------", o_IMEM_cen);
-        // end
-    // end
-    // always @(*) begin //update PC address (MUX1)
-        
+
+    always @(*) begin //deciding if the program is terminated, decide PC addr
         case (i_IMEM_data)
             32'h73: begin
                 ecallreg = 1;
@@ -311,15 +261,17 @@ module CHIP #(                                                                  
             end
         endcase
 
-        case (Branch)
+        case (Branch) //update PC address (MUX1)
             2'b00: begin //no branch
-                // $display("no branch");
                 case (o_IMEM_cen)
                     1'b0: begin
                         next_PC = PC;
                     end
                     1'b1: begin
                         next_PC = PC + 4;
+                    end
+                    default: begin
+                        next_PC = PC;
                     end
                 endcase
             end
@@ -336,37 +288,32 @@ module CHIP #(                                                                  
             end
 
             2'b10: begin //jal, aupic
-                // $display("--------------------------- hello world ---------------------------");
                 case (opcode)
                     aupicop: begin
-                        // write_data = $signed(PC) +$signed(immediate);
                         next_PC = PC + 4;
                     end
                     jalop: begin
-                        // write_data = PC + 4;
-                        next_PC = $signed(PC) + $signed(immediate); //OK
-                        // next_PC = PC + 4;
+                        next_PC = $signed(PC) + $signed(immediate);
+                    end
+                    default: begin
+                        next_PC = PC;
                     end
                 endcase
             end
 
             2'b11: begin //jalr
-                // $display("--------------------------- %b ---------------------------", read_data_1);
-                // $display("--------------------------- hello world ---------------------------");
-                // register_destination = PC + 4;
                 next_PC = $signed(read_data_1) + $signed(immediate);
-                // next_PC = PC + 4;
             end
+
             default: begin
                 next_PC = PC + 4;
             end
         endcase
     end
 
-    always @(*) begin //update rs1, rs2, rd, opcode
+    always @(*) begin //decoding, update rs1, rs2, rd, opcode
         case (i_IMEM_data[6:0])
             7'b0110011: begin //R-type
-                // $display("R-type");
                 register_source_1 = i_IMEM_data[19:15];
                 register_source_2 = i_IMEM_data[24:20];
                 register_destination = i_IMEM_data[11:7];
@@ -376,94 +323,95 @@ module CHIP #(                                                                  
             end
             
             7'b1100111: begin //I-type (jalr)
-                // $display("I-type");
                 register_source_1 = i_IMEM_data[19:15];
                 register_source_2 = 0;
                 register_destination = i_IMEM_data[11:7];
                 immediate = $signed(i_IMEM_data[31:20]);
                 func3 = i_IMEM_data[14:12];
+                func7 = 7'b0;
             end
 
             7'b0010011: begin //I-type (addi...)
-                // $display("I-type (addi...)");
                 register_source_1 = i_IMEM_data[19:15];
                 register_source_2 = 0;
                 register_destination = i_IMEM_data[11:7];
-                
                 func3 = i_IMEM_data[14:12];
                 case (func3) 
                     3'b000: immediate = $signed(i_IMEM_data[31:20]); //addi
                     3'b010: immediate = $signed(i_IMEM_data[31:20]); //slti
                     3'b001: immediate = $signed(i_IMEM_data[24:20]); //slli
                     3'b101: immediate = $signed(i_IMEM_data[24:20]); //srli
+                    default: immediate = 0;
                 endcase
+                func7 = 7'b0;
             end
 
             7'b0000011: begin //I-type (lw)
-                // $display("I-type (lw)");
                 register_source_1 = i_IMEM_data[19:15];
                 register_source_2 = 0;
                 register_destination = i_IMEM_data[11:7];
                 immediate = $signed(i_IMEM_data[31:20]);
                 func3 = i_IMEM_data[14:12];
+                func7 = 7'b0;
             end
 
             7'b1110011: begin //I-type (Ecall)
-                // $display("I-type (Ecall)");
                 register_source_1 = i_IMEM_data[19:15];
                 register_source_2 = 0;
                 register_destination = i_IMEM_data[11:7];
                 immediate = 0;
                 func3 = i_IMEM_data[14:12];
+                func7 = 7'b0;
             end
 
             7'b0100011: begin //S-type
-                // $display("S-type");
                 register_source_1 = i_IMEM_data[19:15];
                 register_source_2 = i_IMEM_data[24:20];
                 register_destination = 0;
                 immediate = $signed({i_IMEM_data[31:25], i_IMEM_data[11:7]});
                 func3 = i_IMEM_data[14:12];
+                func7 = 7'b0;
             end
 
             7'b1100011: begin //SB-type
-                // $display("SB-type");
                 register_source_1 = i_IMEM_data[19:15];
                 register_source_2 = i_IMEM_data[24:20];
                 register_destination = 0;
                 immediate = $signed({i_IMEM_data[31], i_IMEM_data[7], i_IMEM_data[30:25], i_IMEM_data[11:8]}  << 1);
                 func3 = i_IMEM_data[14:12];
+                func7 = 7'b0;
             end
 
             7'b0010111: begin //U-type
-                // $display("U-type");
                 register_source_1 = 0;
                 register_source_2 = 0;
                 register_destination = i_IMEM_data[11:7];
                 immediate = $signed(i_IMEM_data[31:12] << 12);
-                // $display("----------------------------------------------------immediate: %b", immediate);
+                func3 = 3'b0;
+                func7 = 7'b0;
             end
 
             7'b1101111: begin //UJ-type
-                // $display("UJ-type");
                 register_source_1 = 0;
                 register_source_2 = 0;
                 register_destination = i_IMEM_data[11:7];
                 immediate = $signed({i_IMEM_data[31], i_IMEM_data[19:12], i_IMEM_data[20], i_IMEM_data[30:21]} << 1);
+                func3 = 3'b0;
+                func7 = 7'b0;
             end
 
             default: begin
-                // $display("default");
-                register_source_1 = register_source_1;
-                register_source_2 = register_source_2;
-                register_destination = register_destination;
-                immediate = $signed(immediate);
+                register_source_1 = 0;
+                register_source_2 = 0;
+                register_destination = 0;
+                immediate = 0;
+                func3 = 3'b0;
+                func7 = 7'b0;
             end
         endcase
 
         case (MemtoReg) //update write_data (MUX3)
             0: begin
-                // $display("no mtr == 0");
                 case (opcode) 
                     aupicop: begin
                         write_data = $signed(PC) +$signed(immediate);
@@ -477,17 +425,15 @@ module CHIP #(                                                                  
                 endcase                        
             end
             1: begin
-                // $display("yes mtr == 1");
                 write_data = i_DMEM_rdata; 
             end
             default: begin
                 write_data = 0;
             end
         endcase
-
     end
     
-    always @(*) begin //update r_data_1, r_data_2
+    always @(*) begin //update r_data_1, r_data_2, mul_done_reg
         read_data_1 = rdata1;
         read_data_2 = rdata2;
         mul_done_reg = mul_done;
@@ -504,18 +450,7 @@ module CHIP #(                                                                  
         endcase
     end
 
-    always @(*) begin 
-        case ({opcode, func7})
-            {7'b0110011, 7'b0000001}: begin
-                mul_en = 1'b1;
-            end
-            default begin
-                mul_en = 1'b0;
-            end
-        endcase
-    end
-
-    always @(*) begin //choose which output to be used (MUX3)
+    always @(*) begin //choose which output to be used (MUX4)
         case (mul_en)
             1'b1: begin
                 final_op = o_MULDIV_wire;
@@ -528,36 +463,49 @@ module CHIP #(                                                                  
             end
         endcase
     end
-    always @(*) begin
+
+    always @(*) begin //if multiplication is being executed
+        case ({opcode, func7})
+            {7'b0110011, 7'b0000001}: begin
+                mul_en = 1'b1;
+            end
+            default begin
+                mul_en = 1'b0;
+            end
+        endcase
+    end
+
+    always @(*) begin //multiplcation ready to load input
         if ( (!mul_en_old && mul_en) || (mul_done_reg_old && !mul_done_reg) ) begin
             mul_valid = 1;
-
         end
         else begin
             mul_valid = 0;
         end
     end
-    always @(*) begin
+
+    always @(*) begin //deciding whether multiplication counter can execute
         if ( mul_en && !mul_done_reg ) begin
             mul_counter_valid = 1;
-
         end
         else begin
             mul_counter_valid = 0;
         end
     end
+
     always @(posedge i_clk or negedge i_rst_n) begin
-        mul_en_old <= mul_en;
-        mul_done_reg_old <= mul_done_reg;
         if (!i_rst_n) begin
             PC <= 32'h00010000; // Do not modify this value!!!
             state <= 1'b1;
+            mul_en_old <= mul_en;
+            mul_done_reg_old <= mul_done_reg;
         end
         else begin
             PC <= next_PC;
             state <= state_nxt;
+            mul_en_old <= mul_en;
+            mul_done_reg_old <= mul_done_reg;
         end
-        
     end
 endmodule
 
@@ -632,47 +580,36 @@ module ALU #(
         i_b = i_B;
         case (ALUOp)
             4'b0000: begin // add, addi
-                // $display("add:\t");
                 op = $signed(i_a) + $signed(i_b);
             end
             4'b0001: begin // sub
-                // $display("sub:\t");
                 op = $signed(i_a) - $signed(i_b);
             end
             4'b0010: begin // and
-                // $display("and:\t");
                 op = i_a & i_b;
             end
             4'b0011: begin // xor
-                // $display("xor:\t");
                 op = i_a ^ i_b;
             end
             4'b0100: begin // slli
-                // $display("slli:\t");
                 op = i_a << i_b;
             end
             4'b0101: begin // slti
-                // $display("slti:\t");
                 op = ($signed(i_a) < $signed(i_b)) ? {63'b0, 1'b1} : {63'b0, 1'b0};
             end
             4'b0110: begin // srai
-                // $display("srai:\t");
                 op = i_a >>> i_b;
             end
             4'b1001: begin //beq
-                // $display("beq:\t");
                 op = (($signed(i_a) - $signed(i_b)) == 0) ? 1 : 0;
             end
             4'b1010: begin //bge
-                // $display("bge:\t");
                 op = (($signed(i_a) - $signed(i_b)) >= 0) ? 1 : 0;
             end      
             4'b1011: begin //blt
-                // $display("blt:\t");
                 op = (($signed(i_a) - $signed(i_b)) < 0) ? 1 : 0;
             end
             4'b1100: begin //bne
-                // $display("bne:\t");
                 op = (($signed(i_a) - $signed(i_b)) != 0) ? 1 : 0;
             end
             default: begin
@@ -691,7 +628,6 @@ module MULDIV_unit #(
     input                       i_valid, // input valid signal
     input [BIT_W - 1 : 0]       i_A,     // input operand A
     input [BIT_W - 1 : 0]       i_B,     // input operand B
-    // input [        3 : 0]       ALUOp,  // instruction
     input                       i_counter_valid,
     output [2*BIT_W - 1 : 0]    o_data,  // output value
     output                      o_done   // output valid signal
@@ -702,52 +638,56 @@ module MULDIV_unit #(
     reg  [  2*BIT_W: 0] result, result_nxt;    
     reg  [         4: 0] counter, counter_nxt;
     reg valid_signal, valid_signal_nxt;
-    
+    reg counter_accu;
+    reg result_reset;
     assign o_data = result;
     assign o_done = valid_signal;
+
+    always @(*) begin
+        if(!i_valid && i_counter_valid && counter < 31) begin
+            counter_nxt = counter + 1;
+        end
+        else begin
+            counter_nxt = 0;
+        end
+    end
 
     always @(*) begin
         if (i_valid && counter === 0) begin
             operand_a_nxt = i_A;
             operand_b_nxt = i_B;
-            result_nxt = 0;
         end
         else begin
             operand_a_nxt = operand_a;
             operand_b_nxt = operand_b;
-            result_nxt = (operand_b[counter]) ? (result + ({33'b0, operand_a} << counter)) : result;    
-            result_nxt = (counter == 31) ? result_nxt[31:0] : result_nxt;
         end
         valid_signal_nxt = (counter == 31) ? 1 : 0;
     end
 
-    always @(posedge i_clk or negedge i_rst_n) begin
-        if (i_rst_n && !i_valid && i_counter_valid) begin
-            counter <= counter + 1;
-        end 
-        else begin
-            counter <= 0;
+    always @(*) begin
+        if (i_valid && counter === 0) begin
+            result_nxt = 0;
         end
-        if(i_rst_n && i_counter_valid) begin
-            result <= 0;
+        else begin
+            result_nxt = (operand_b[counter]) ? (result + ({33'b0, operand_a} << counter)) : result;    
+            result_nxt = (counter == 31) ? result_nxt[31:0] : result_nxt;
         end
     end
-    
-    
 
-    // Todo: Sequential always block
     always @(posedge i_clk or negedge i_rst_n) begin
         if (!i_rst_n ) begin
             result      <= 0;
             valid_signal <= 0;
             operand_a   <= 0;
             operand_b   <= 0;
+            counter <= 0;
         end
         else begin
             result      <= result_nxt;
             valid_signal <= valid_signal_nxt;
             operand_a   <= operand_a_nxt;
             operand_b   <= operand_b_nxt;
+            counter <= counter_nxt;
         end
     end
 endmodule
@@ -782,7 +722,6 @@ module ControlUnit(
         case (opcode)
             // R-type instructions
             7'b0110011: begin
-                $display("R-type");
                 branch = 2'b00;
                 memrnw = 0;
                 memtoreg = 0;
@@ -812,7 +751,6 @@ module ControlUnit(
 
             // Load instructions
             7'b0000011: begin
-                $display("Load");
                 branch = 2'b00;
                 memrnw = 1;
                 memtoreg = 1;
@@ -824,7 +762,6 @@ module ControlUnit(
 
             // Store instructions
             7'b0100011: begin
-                $display("Store");
                 branch = 2'b00;
                 memrnw = 1;
                 memtoreg = 0;
@@ -836,7 +773,6 @@ module ControlUnit(
 
             // branch instructions
             7'b1100011: begin
-                $display("Branch");
                 branch = 2'b01;
                 memrnw = 0;
                 memtoreg = 0;
@@ -854,7 +790,6 @@ module ControlUnit(
 
             // Immediate instructions
             7'b0010011: begin
-                $display("Immediate instructions");
                 branch = 2'b00;
                 memrnw = 0;
                 memtoreg = 0;
@@ -872,7 +807,6 @@ module ControlUnit(
 
             // Jal instructions
             7'b1101111: begin
-                $display("Jump instructions");
                 branch = 2'b10;
                 memrnw = 0;
                 memtoreg = 0;
@@ -884,7 +818,6 @@ module ControlUnit(
 
             // Jalr instructions
             7'b1100111: begin
-                $display("jalr instruction");
                 branch = 2'b11;
                 memrnw = 0;
                 memtoreg = 0;
@@ -896,7 +829,6 @@ module ControlUnit(
 
             // Ecall instruction
             7'b1110011: begin
-                $display("Ecall");
                 branch = 2'b00;
                 memrnw = 0;
                 memtoreg = 0;
@@ -908,7 +840,6 @@ module ControlUnit(
 
             // aupic instruction
             aupicop: begin
-                $display("Aupic");
                 branch = 2'b10;
                 memrnw = 0;
                 memtoreg = 0;
