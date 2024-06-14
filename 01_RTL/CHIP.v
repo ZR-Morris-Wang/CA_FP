@@ -212,6 +212,7 @@ module CHIP #(                                                                  
         .i_valid (mul_valid_wire),
         .i_A     (i_A_wire),
         .i_B     (i_B_wire),
+        .i_counter_valid(mul_en),
         .o_data  (o_MULDIV_wire),
         .o_done  (mul_done)
     );
@@ -494,8 +495,8 @@ module CHIP #(                                                                  
     end
 
     always @(*) begin 
-        case (opcode)
-            7'b0110011: begin
+        case ({opcode, func7})
+            {7'b0110011, 7'b0000001}: begin
                 mul_en = 1'b1;
             end
             default begin
@@ -517,7 +518,14 @@ module CHIP #(                                                                  
             end
         endcase
     end
-
+    always @(*) begin
+        if ( !mul_en_old && mul_en ) begin
+            mul_valid = 1;
+        end
+        else begin
+            mul_valid = 0;
+        end
+    end
     always @(posedge i_clk or negedge i_rst_n) begin
         mul_en_old <= mul_en;
         if (!i_rst_n) begin
@@ -528,12 +536,7 @@ module CHIP #(                                                                  
             PC <= next_PC;
             state <= state_nxt;
         end
-        if ( !mul_en_old && mul_en ) begin
-            mul_valid <= 1;
-        end
-        else begin
-            mul_valid <= 0;
-        end
+        
     end
 endmodule
 
@@ -667,8 +670,8 @@ module MULDIV_unit #(
     input                       i_valid, // input valid signal
     input [BIT_W - 1 : 0]       i_A,     // input operand A
     input [BIT_W - 1 : 0]       i_B,     // input operand B
-    input [        3 : 0]       ALUOp,  // instruction
-
+    // input [        3 : 0]       ALUOp,  // instruction
+    input                       i_counter_valid,
     output [2*BIT_W - 1 : 0]    o_data,  // output value
     output                      o_done   // output valid signal
 
@@ -686,29 +689,29 @@ module MULDIV_unit #(
         if (i_valid && counter === 0) begin
             operand_a_nxt = i_A;
             operand_b_nxt = i_B;
+            result_nxt = 0;
         end
         else begin
             operand_a_nxt = operand_a;
             operand_b_nxt = operand_b;
+            result_nxt = (operand_b[counter]) ? (result + ({33'b0, operand_a} << counter)) : result;    
+            result_nxt = (counter == 31) ? result_nxt[31:0] : result_nxt;
         end
-
-    valid_signal_nxt = (counter == 31) ? 1 : 0;
-    result_nxt = (operand_b[counter]) ? (result + ({33'b0, operand_a} << counter)) : result;
-    result_nxt = (counter == 31) ? result_nxt[31:0] : result_nxt;
+        valid_signal_nxt = (counter == 31) ? 1 : 0;
     end
-    
-    // always @(posedge valid_signal) begin
-    //     mul_en <= 0;
-    // end
-    
+
     always @(posedge i_clk or negedge i_rst_n) begin
-        if (!i_rst_n || i_valid) begin
-            counter <= 0;
+        if (i_rst_n && !i_valid && i_counter_valid) begin
+            counter <= counter + 1;
         end 
         else begin
-            counter <= counter + 1;
+            counter <= 0;
+        end
+        if(i_rst_n && i_counter_valid) begin
+            result <= 0;
         end
     end
+    
     
 
     // Todo: Sequential always block
