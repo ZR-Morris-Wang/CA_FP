@@ -891,6 +891,57 @@ module Cache#(
 
     assign o_cache_available = 0; // change this value to 1 if the cache is implemented
 
+
+    // parameters
+    parameter Not_Called = 1'b0;
+    parameter Called = 1'b1;
+    parameter Read = 1'b1;  // b/c xor operation
+    parameter Write = 1'b0;
+    parameter Hit = 1'b1;
+    parameter Miss = 1'b0;
+    parameter Full = 1'b1;
+    parameter Not_Full = 1'b0;
+    parameter Dirty = 1'b1;  // for checking dirty
+    parameter Not_Dirty = 1'b0;  // for checking dirty
+
+    // states
+    parameter ReadMissNot = 3'b000;     // 1-1
+    parameter ReadMissFull = 3'b001;    // 1-2
+    parameter ReadHitX = 3'b010;        // 1-3 1-4
+    parameter WriteMissNot = 3'b011;    // 1-5
+    parameter WriteHitX = 3'b100;       // 1-6 1-8
+    parameter WriteMissFull = 3'b101;   // 1-7
+    parameter noChange = 3'b110;        // 1-9 // 2-9
+    
+    // useful parameters
+    parameter LINE_W = 158;
+
+    // regs and wires 
+    reg [LINE_W - 1:0] cache [0:15]; // 16 lines, 4 words
+    reg [LINE_W - 1:0] cache_data_nxt;
+    reg [LINE_W - 2:0] write_buffer, write_buffer_nxt;    // minus dirty and valid. addr 照樣從 tag 再 left shift 4 bits
+    reg [ADDR_W:0] write_buffer_addr, write_buffer_addr_nxt;
+    // reg [27:0] tag                   // incoming tag 可以直接從 i_proc_addr 切
+    // reg [1:0] block_offset           // incoming offset 可以直接從 i_proc_addr 切
+    reg full, full_nxt;
+    reg hit, hit_nxt;
+    reg WB_flag, WB_flag_nxt, 
+    reg dirty, dirty_nxt;
+    // reg RW, RW_nxt;                  // can be o_proc_cen ^ o_proc_wen
+    reg state, state_nxt;
+
+    // memory interface
+    reg mem_cen, mem_wen;
+
+    assign o_mem_addr = write_buffer_addr;
+    assign o_mem_wdata = write_buffer;
+    assign o_mem_cen = mem_cen;
+    assign o_mem_wen = mem_wen;
+
+    // processor interface
+    reg [BIT_W - 1: 0] output_data;
+    assign o_proc_rdata = output_data;
+
     //------------------------------------------//
     //          default connection              //
     assign o_mem_cen = i_proc_cen;              //
