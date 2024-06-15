@@ -869,22 +869,22 @@ module Cache#(
         input i_clk,
         input i_rst_n,
         // processor interface
-            input i_proc_cen,
-            input i_proc_wen,
-            input [ADDR_W-1:0] i_proc_addr,
-            input [BIT_W-1:0]  i_proc_wdata,
-            output [BIT_W-1:0] o_proc_rdata,
-            output o_proc_stall,
-            input i_proc_finish,
-            output o_cache_finish,
+        input i_proc_cen,
+        input i_proc_wen,
+        input [ADDR_W-1:0] i_proc_addr,
+        input [BIT_W-1:0]  i_proc_wdata,
+        output [BIT_W-1:0] o_proc_rdata,
+        output o_proc_stall,
+        input i_proc_finish,
+        output o_cache_finish,
         // memory interface
-            output o_mem_cen,
-            output o_mem_wen,
-            output [ADDR_W-1:0] o_mem_addr,
-            output [BIT_W*4-1:0]  o_mem_wdata,
-            input [BIT_W*4-1:0] i_mem_rdata,
-            input i_mem_stall,
-            output o_cache_available,
+        output o_mem_cen,
+        output o_mem_wen,
+        output [ADDR_W-1:0] o_mem_addr,
+        output [BIT_W*4-1:0]  o_mem_wdata,
+        input [BIT_W*4-1:0] i_mem_rdata,
+        input i_mem_stall,
+        output o_cache_available,
         // others
         input  [ADDR_W-1: 0] i_offset
     );
@@ -895,12 +895,16 @@ module Cache#(
     // parameters
     parameter Not_Called = 1'b0;
     parameter Called = 1'b1;
+
     parameter Read = 1'b1;  // b/c xor operation
     parameter Write = 1'b0;
+
     parameter Hit = 1'b1;
     parameter Miss = 1'b0;
+
     parameter Full = 1'b1;
     parameter Not_Full = 1'b0;
+
     parameter Dirty = 1'b1;  // for checking dirty
     parameter Not_Dirty = 1'b0;  // for checking dirty
 
@@ -944,14 +948,52 @@ module Cache#(
 
     //------------------------------------------//
     //          default connection              //
-    assign o_mem_cen = i_proc_cen;              //
-    assign o_mem_wen = i_proc_wen;              //
-    assign o_mem_addr = i_proc_addr;            //
-    assign o_mem_wdata = i_proc_wdata;          //
-    assign o_proc_rdata = i_mem_rdata[0+:BIT_W];//
-    assign o_proc_stall = i_mem_stall;          //
+    // assign o_mem_cen = i_proc_cen;              //
+    // assign o_mem_wen = i_proc_wen;              //
+    // assign o_mem_addr = i_proc_addr;            //
+    // assign o_mem_wdata = i_proc_wdata;          //
+    // assign o_proc_rdata = i_mem_rdata[0+:BIT_W];//
+    // assign o_proc_stall = i_mem_stall;          //
     //------------------------------------------//
+    integer i;
+    
+    always(*) begin //get hit and full
+        hit_nxt = 0;
+        full_nxt = 0;
+        for (i = 0; i < LINE_W; i = i + 1) begin
+            if (cache [i] [LINE_W - 3:LINE_W - 30] === i_proc_addr[BIT_W - 1:4]) begin
+                hit_nxt = 1;
+            end
+            if (cache [i] [LINE_W - 31:0] === 0 && i === LINE_W - 1) begin
+                full_nxt = 1;
+            end
+        end
+    end
 
+    always(*) begin //decide state
+        case ({i_proc_cen, i_proc_wen})
+            {1'b1, 1'b0}: begin //read
+                case ({hit, full})
+                endcase
+            end
+            {1'b1, 1'b1}: begin //write
+                case ({hit, full})
+                endcase
+            end
+            default: begin
+                state_nxt = noChange; 
+            end
+        endcase
+    end
+
+    always @(posedge i_clk or negedge i_rst_n) begin
+        if (!i_rst_n ) begin
+            
+        end
+        else begin
+            
+        end
+    end
     // Todo: BONUS
 
 endmodule
