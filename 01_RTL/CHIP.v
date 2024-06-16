@@ -1048,7 +1048,6 @@ module Cache#(
         end
 
         case (state)
-
             ReadMissNot: begin
                 if(!WB_flag && i_proc_cen) begin        // Allocating
                     mem_cen_nxt = 1'b1;
