@@ -919,6 +919,7 @@ module Cache#(
     
     // useful parameters
     parameter LINE_W = 158;
+    parameter LINE_NUM = 16;
 
     // regs and wires 
     reg [LINE_W - 1:0] cache [0:15]; // 16 lines, 4 words
@@ -959,15 +960,13 @@ module Cache#(
     
     always(*) begin //get hit and full
         hit_nxt = 0;
-        full_nxt = 0;
-        for (i = 0; i < LINE_W; i = i + 1) begin
-            if (cache [i] [LINE_W - 3:LINE_W - 30] === i_proc_addr[BIT_W - 1:4]) begin
-                hit_nxt = 1;
-            end
-            if (cache [i] [LINE_W - 31:0] === 0 && i === LINE_W - 1) begin
-                full_nxt = 1;
-            end
+        full_nxt = 1;
+
+        for (i = 0; i < LINE_NUM; i = i + 1) begin
+            hit_nxt = (cache [LINE_W - 3:LINE_W - 30][i] === i_proc_addr[BIT_W - 1:4]) ? 1 : hit_nxt;
+            full_nxt = (cache[LINE_W - 1][i] && full_nxt) ? 1 : 0;
         end
+
     end
 
     always(*) begin //decide state
