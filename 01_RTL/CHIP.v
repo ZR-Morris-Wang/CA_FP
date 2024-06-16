@@ -232,6 +232,17 @@ module CHIP #(                                                                  
         .RegWrite(RegWrite)
     );
 
+    // Cache cache0(
+    //     .i_clk(i_clk),
+    //     .i_rst_n(i_rst_n),
+    //     .o_proc_stall(i_DMEM_stall),
+    //     .o_proc_rdata(i_DMEM_rdata),
+    //     .i_proc_cen(o_DMEM_cen),
+    //     .i_proc_wen(o_DMEM_wen),
+    //     .i_proc_addr(o_DMEM_addr),
+    //     .i_proc_wdata(o_DMEM_wdata),
+    // );
+
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
 // Always Blocks
 // ------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -889,7 +900,7 @@ module Cache#(
         input  [ADDR_W-1: 0] i_offset
     );
 
-    assign o_cache_available = 0; // change this value to 1 if the cache is implemented
+    assign o_cache_available = 1; // change this value to 1 if the cache is implemented
 
 
     // parameters
@@ -937,7 +948,7 @@ module Cache#(
 
     reg full, full_nxt;
     reg hit, hit_nxt;
-    reg WB_flag, WB_flag_nxt, 
+    reg WB_flag, WB_flag_nxt; 
     reg dirty, dirty_nxt;
     reg line_hit, line_hit_nxt;
     // reg RW, RW_nxt;                  // can be o_proc_cen ^ o_proc_wen
@@ -947,6 +958,8 @@ module Cache#(
     reg mem_cen, mem_cen_nxt;
     reg mem_wen, mem_wen_nxt;  
     reg [ADDR_W - 1: 0] mem_addr, mem_addr_nxt;
+    reg mem_stall;
+    reg [127: 0] mem_rdata;
 
     assign o_mem_addr = mem_addr;
     assign o_mem_wdata = write_buffer;
@@ -977,8 +990,8 @@ module Cache#(
         full_nxt = Full;    // negative logic
 
         for (i = 0; i < LINE_NUM; i = i + 1) begin
-            hit_nxt = (cache [LINE_W - 3:LINE_W - 30][i] === i_proc_addr[BIT_W - 1:4]) ? Hit : hit_nxt;
-            full_nxt = (cache[LINE_W - 1][i] && full_nxt) ? Full : !Full;
+            hit_nxt = (cache [i][LINE_W - 3:LINE_W - 30] === i_proc_addr[BIT_W - 1:4]) ? Hit : hit_nxt;
+            full_nxt = (cache[i][LINE_W - 1] && full_nxt) ? Full : !Full;
         end
 
 
@@ -1031,7 +1044,7 @@ module Cache#(
     always @ (*) begin
 
         for (i = 0; i < LINE_NUM; i = i + 1) begin // Sending
-            line_hit_nxt = (i_proc_addr[BIT_W - 1:4] === cache[LINE_W - 3:LINE_W - 30][i]) ? i : line_hit_nxt;
+            line_hit_nxt = (i_proc_addr[BIT_W - 1:4] === cache[i][LINE_W - 3:LINE_W - 30]) ? i : line_hit_nxt;
         end
 
         case (state)
@@ -1047,7 +1060,7 @@ module Cache#(
                     write_buffer_done_nxt = write_buffer_done;
 
                     for (i = 0; i < LINE_NUM; i = i + 1) begin // Sending
-                        output_data_nxt = cache_finish ? ((i_proc_addr[ADD_W - 1: 4] === cache[LINE_W - 3: LINE_W - 30][i]) ? (cache[i_proc_addr[3:2] * BIT_W +: 31][i]) : output_data_nxt) : output_data;
+                        output_data_nxt = cache_finish ? ((i_proc_addr[ADDR_W - 1: 4] === cache[i][LINE_W - 3: LINE_W - 30]) ? (cache[i][i_proc_addr[3:2] * BIT_W +: 31]) : output_data_nxt) : output_data;
                     end
 
                     line_hit_nxt = line_hit;
@@ -1059,7 +1072,7 @@ module Cache#(
                     proc_stall_nxt = 1'b1;
                     mem_addr_nxt = write_buffer_addr;
                     cache_finish_nxt = 1'b0;
-                    cache_data_nxt = cache[127:0][line_hit];
+                    cache_data_nxt = cache[line_hit][127:0];
                     WB_flag_nxt = !i_mem_stall;
                     write_buffer_done_nxt = !i_mem_stall;
                     output_data_nxt= output_data;
@@ -1071,7 +1084,7 @@ module Cache#(
                     proc_stall_nxt = proc_stall;
                     mem_addr_nxt = mem_addr;
                     cache_finish_nxt = cache_finish;
-                    cache_data_nxt = cache[LINE_W - 1:0][line_hit];
+                    cache_data_nxt = cache[line_hit][LINE_W - 1:0];
                     WB_flag_nxt = WB_flag;
                     write_buffer_done_nxt = write_buffer_done;
                     output_data_nxt = output_data;
@@ -1081,8 +1094,8 @@ module Cache#(
 
             ReadMissFull: begin
                 if(!write_buffer_done) begin        // write to write_buffer
-                    write_buffer_nxt = cache[127: 0][i_proc_addr[29: 0] % 16];
-                    write_buffer_addr_nxt = (cache[LINE_W - 3: LINE_W - 30][i_proc_addr[29: 0] % 16] << 4);
+                    write_buffer_nxt = cache[i_proc_addr[29: 0] % 16][127: 0];
+                    write_buffer_addr_nxt = (cache[i_proc_addr[29: 0] % 16][LINE_W - 3: LINE_W - 30] << 4);
                     write_buffer_done_nxt = 1'b1;
                 end
                 else write_buffer_done_nxt = write_buffer_done;
@@ -1096,7 +1109,7 @@ module Cache#(
                     cache_data_nxt = {!Dirty, Valid, i_proc_addr[ADDR_W - 1: 4], i_mem_rdata};
                     WB_flag_nxt = 1'b0;
                     for (i = 0; i < LINE_NUM; i = i + 1) begin // Sending
-                        output_data_nxt = cache_finish ? ((i_proc_addr[ADD_W - 1: 4] === cache[LINE_W - 3: LINE_W - 30][i]) ? (cache[i_proc_addr[3:2] * BIT_W +: 31][i]) : output_data_nxt) : output_data;
+                        output_data_nxt = cache_finish ? ((i_proc_addr[ADDR_W - 1: 4] === cache[i][LINE_W - 3: LINE_W - 30]) ? (cache[i][i_proc_addr[3:2] * BIT_W +: 31]) : output_data_nxt) : output_data;
                     end
                     write_buffer_done_nxt = write_buffer_done;
                     line_hit_nxt = line_hit;
@@ -1134,9 +1147,9 @@ module Cache#(
                 proc_stall_nxt = 1'b0;      // possibly has a read for stall
                 mem_addr_nxt = mem_addr;
                 cache_finish_nxt = 1'b1;
-                cache_data_nxt = cache[LINE_W - 1:0][line_hit];
+                cache_data_nxt = cache[line_hit][LINE_W - 1:0];
                 for (i = 0; i < LINE_NUM; i = i + 1) begin
-                    output_data_nxt = cache_finish ? ((i_proc_addr[ADD_W - 1: 4] === cache[LINE_W - 3: LINE_W - 30][i]) ? (cache[i_proc_addr[3:2] * BIT_W +: 31][i]) : output_data_nxt) : output_data;
+                    output_data_nxt = cache_finish ? ((i_proc_addr[ADDR_W - 1: 4] === cache[i][LINE_W - 3: LINE_W - 30]) ? (cache[i][i_proc_addr[3:2] * BIT_W +: 31]) : output_data_nxt) : output_data;
                 end
                 WB_flag_nxt = WB_flag;
                 write_buffer_done_nxt = write_buffer_done;
@@ -1197,8 +1210,8 @@ module Cache#(
 
             WriteMissFull: begin
                 if(!write_buffer_done) begin        // write to write_buffer
-                    write_buffer_nxt = cache[127: 0][i_proc_addr[29: 0] % 16];
-                    write_buffer_addr_nxt = (cache[LINE_W - 3: LINE_W - 30][i_proc_addr[29: 0] % 16] << 4);
+                    write_buffer_nxt = cache[i_proc_addr[29: 0] % 16][127: 0];
+                    write_buffer_addr_nxt = (cache[i_proc_addr[29: 0] % 16][LINE_W - 3: LINE_W - 30] << 4);
                     write_buffer_done_nxt = 1'b1;
                 end
                 else write_buffer_done_nxt = write_buffer_done;
@@ -1308,7 +1321,7 @@ module Cache#(
             write_buffer_addr <= 0;
             write_buffer <= 0;
             for (i = 0; i < LINE_NUM; i = i + 1) begin
-                cache[LINE_W - 1: 0][i] <= 157'b0;
+                cache[i][LINE_W - 1: 0] <= 157'b0;
             end
             output_data <= 0;
             proc_stall <= 0;
@@ -1322,13 +1335,15 @@ module Cache#(
             WB_flag <= WB_flag_nxt;
             mem_cen <= mem_cen_nxt;
             mem_wen <= mem_wen_nxt;
+            // for (i = 0; i < LINE_NUM; i = i + 1) begin
+            //     mem_addr <= cache[i][LINE_W - 1] ? (cache[i][LINE_W - 3: LINE_W - 30] << 4) : mem_addr;
+            //     mem_wdata <= cache[i][LINE_W - 1] ? cache[i][127: 0] : mem_wdata;
+            // end
             for (i = 0; i < LINE_NUM; i = i + 1) begin
-                mem_addr <= cache[LINE_W - 1][i] ? (cache[LINE_W - 3: LINE_W - 30][i] << 4) : mem_addr;
-                mem_wdata <= cache[LINE_W - 1][i] ? cache[127: 0][i] : mem_wdata;
+                write_buffer_addr <= cache[i][LINE_W - 1] ? (cache[i][LINE_W - 3: LINE_W - 30] << 4) : write_buffer_addr_nxt;
+                write_buffer <= cache[i][LINE_W - 1] ? cache[i][127: 0] : write_buffer_nxt;
             end
-            write_buffer_addr <= write_buffer_addr_nxt;
-            write_buffer <= write_buffer_nxt;
-            cache[LINE_W - 1: 0][line_hit] <= cache_data_nxt;
+            cache[line_hit][LINE_W - 1: 0] <= cache_data_nxt;
             output_data <= output_data_nxt;
             proc_stall <= proc_stall_nxt;  
             cache_finish <= cache_finish_nxt;
@@ -1343,7 +1358,7 @@ module Cache#(
             mem_wen <= mem_wen_nxt;
             write_buffer_addr <= write_buffer_addr_nxt;
             write_buffer <= write_buffer_nxt;
-            cache[LINE_W - 1: 0][line_hit] <= cache_data_nxt;
+            cache[line_hit][LINE_W - 1: 0] <= cache_data_nxt;
             output_data <= output_data_nxt;
             proc_stall <= proc_stall_nxt;  
             cache_finish <= cache_finish_nxt;
