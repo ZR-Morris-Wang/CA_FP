@@ -1030,10 +1030,10 @@ module Cache#(
                 endcase
             end
             {1'b0, 1'b0, 1'b0}: begin //neither send nor write
-                state_nxt = Wait
+                state_nxt = Wait;
             end
             {1'bx, 1'bx, 1'b1}:begin //stalled by memory
-                state_nxt = state
+                state_nxt = state;
             end
             default: begin
                 state_nxt = state; 
@@ -1048,7 +1048,7 @@ module Cache#(
         end
 
         case (state)
-        
+
             ReadMissNot: begin
                 if(!WB_flag && i_proc_cen) begin        // Allocating
                     mem_cen_nxt = 1'b1;
