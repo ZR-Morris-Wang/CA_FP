@@ -893,8 +893,8 @@ module Cache#(
 
 
     // parameters
-    parameter Not_Called = 1'b0;
     parameter Called = 1'b1;
+    parameter Not_Called = 1'b0;
 
     parameter Read = 1'b1;  // b/c xor operation
     parameter Write = 1'b0;
