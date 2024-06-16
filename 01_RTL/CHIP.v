@@ -105,10 +105,6 @@ module CHIP #(                                                                  
 
         //termination
         reg ecallreg;
-        
-        //w/ dmem
-        reg dmem_cen;
-        reg dmem_wen;
 
         //Reg_file
         reg [4:0] register_source_1, register_source_2, register_destination; //I
@@ -160,7 +156,6 @@ module CHIP #(                                                                  
 
         //termination
         assign o_finish = ecallreg;
-
 
         //Reg_file
         assign rs1 = register_source_1; 
@@ -904,8 +899,8 @@ module Cache#(
 
 
     // parameters
-    parameter Called = 1'b1;
     parameter Not_Called = 1'b0;
+    parameter Called = 1'b1;
 
     parameter Read = 1'b1;  // b/c xor operation
     parameter Write = 1'b0;
