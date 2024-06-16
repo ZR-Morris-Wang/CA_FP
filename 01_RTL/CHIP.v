@@ -944,7 +944,7 @@ module Cache#(
     reg hit, hit_nxt;
     reg WB_flag, WB_flag_nxt; 
     reg dirty, dirty_nxt;
-    reg line_hit, line_hit_nxt;
+    reg [3:0]line_hit, line_hit_nxt;
     // reg RW, RW_nxt;                  // can be o_proc_cen ^ o_proc_wen
     reg [2:0] state, state_nxt;
 
@@ -990,8 +990,8 @@ module Cache#(
         end
 
      //decide state
-        case ({i_proc_cen, i_proc_wen})
-            {1'b1, 1'b0}: begin //read
+        casex ({i_proc_cen, i_proc_wen, i_mem_stall})
+            {1'b1, 1'b0, 1'b0}: begin //read
                 case ({hit, full})
                     {Miss, !Full}: begin
                         state_nxt = ReadMissNot;
@@ -1010,7 +1010,7 @@ module Cache#(
                     end
                 endcase
             end
-            {1'b1, 1'b1}: begin //write
+            {1'b1, 1'b1, 1'b0}: begin //write
                 case ({hit, full})
                     {Miss, !Full}: begin
                         state_nxt = WriteMissNot;
@@ -1029,19 +1029,26 @@ module Cache#(
                     end
                 endcase
             end
+            {1'b0, 1'b0, 1'b0}: begin //neither send nor write
+                state_nxt = Wait
+            end
+            {1'bx, 1'bx, 1'b1}:begin //stalled by memory
+                state_nxt = state
+            end
             default: begin
-                state_nxt = noChange; 
+                state_nxt = state; 
             end
         endcase
     end
 
     always @ (*) begin
-
+        line_hit_nxt = 4'bxxxx;
         for (i = 0; i < LINE_NUM; i = i + 1) begin // Sending
             line_hit_nxt = (i_proc_addr[BIT_W - 1:4] === cache[i][LINE_W - 3:LINE_W - 30]) ? i : line_hit_nxt;
         end
 
         case (state)
+        
             ReadMissNot: begin
                 if(!WB_flag && i_proc_cen) begin        // Allocating
                     mem_cen_nxt = 1'b1;
