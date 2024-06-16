@@ -974,10 +974,40 @@ module Cache#(
         case ({i_proc_cen, i_proc_wen})
             {1'b1, 1'b0}: begin //read
                 case ({hit, full})
+                    {1'b0, 1'b0}: begin
+                        state_nxt = ReadMissNot;
+                    end
+                    {1'b0, 1'b1}: begin
+                        state_nxt = ReadMissFull;
+                    end
+                    {1'b1, 1'b0}: begin
+                        state_nxt = ReadHitX;
+                    end
+                    {1'b1, 1'b1}: begin
+                        state_nxt = ReadHitX;
+                    end
+                    default: begin
+                        state_nxt = state;
+                    end
                 endcase
             end
             {1'b1, 1'b1}: begin //write
                 case ({hit, full})
+                    {1'b0, 1'b0}: begin
+                        state_nxt = WriteMissNot;
+                    end
+                    {1'b0, 1'b1}: begin
+                        state_nxt = WriteMissFull;
+                    end
+                    {1'b1, 1'b0}: begin
+                        state_nxt = WriteHitX;
+                    end
+                    {1'b1, 1'b1}: begin
+                        state_nxt = WriteHitX;
+                    end
+                    default: begin
+                        state_nxt = state;
+                    end
                 endcase
             end
             default: begin
@@ -986,14 +1016,14 @@ module Cache#(
         endcase
     end
 
-    always @(posedge i_clk or negedge i_rst_n) begin
-        if (!i_rst_n ) begin
+    // always @(posedge i_clk or negedge i_rst_n) begin
+    //     if (!i_rst_n ) begin
             
-        end
-        else begin
+    //     end
+    //     else begin
             
-        end
-    end
+    //     end
+    // end
     // Todo: BONUS
 
 endmodule
