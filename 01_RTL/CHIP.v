@@ -105,6 +105,7 @@ module CHIP #(                                                                  
 
         //termination
         reg ecallreg;
+        reg procreg;
 
         //Reg_file
         reg [4:0] register_source_1, register_source_2, register_destination; //I
@@ -156,6 +157,7 @@ module CHIP #(                                                                  
 
         //termination
         assign o_finish = ecallreg;
+        assign o_proc_finish = procreg;
 
         //Reg_file
         assign rs1 = register_source_1; 
@@ -261,9 +263,11 @@ module CHIP #(                                                                  
         case (i_IMEM_data)
             32'h73: begin
                 ecallreg = 1;
+                procreg = 1;
             end
             default: begin
                 ecallreg = 0;
+                procreg = 0;
             end
         endcase
 
@@ -933,39 +937,36 @@ module Cache#(
     // regs and wires 
     reg [LINE_W - 1:0] cache [0:15]; // 16 lines, 4 words
     reg [LINE_W - 1:0] cache_data_nxt;
-    reg [4 * BIT_W - 1:0] write_buffer, write_buffer_nxt;    // minus dirty and valid. addr 照樣從 tag 再 left shift 4 bits
-    reg [ADDR_W:0] write_buffer_addr, write_buffer_addr_nxt;
-    reg write_buffer_done, write_buffer_done_nxt; 
 
     // reg [27:0] tag                   // incoming tag 可以直接從 i_proc_addr 切
     // reg [1:0] block_offset           // incoming offset 可以直接從 i_proc_addr 切
 
-    reg full, full_nxt;
-    reg hit, hit_nxt;
-    reg WB_flag, WB_flag_nxt; 
-    reg dirty, dirty_nxt;
-    reg [3:0]line_hit, line_hit_nxt;
+    reg full;
+    reg hit;
+    reg dirty;
+    reg [4:0]line_hit;
     // reg RW, RW_nxt;                  // can be o_proc_cen ^ o_proc_wen
     reg [2:0] state, state_nxt;
 
     // memory interface
-    reg mem_cen, mem_cen_nxt;
-    reg mem_wen, mem_wen_nxt;  
-    reg [ADDR_W - 1: 0] mem_addr, mem_addr_nxt;
+    reg mem_cen;
+    reg mem_wen;  
+    reg [ADDR_W - 1: 0] mem_addr;
     reg mem_stall;
     reg [127: 0] mem_rdata;
+    reg [127: 0] mem_wdata;
 
     assign o_mem_addr = mem_addr;
-    assign o_mem_wdata = write_buffer;
     assign o_mem_cen = mem_cen;
     assign o_mem_wen = mem_wen;
+    assign o_mem_wdata = mem_wdata;
 
     // processor interface
-    reg [BIT_W - 1: 0] output_data, output_data_nxt;
-    reg proc_stall, proc_stall_nxt;
-    reg cache_finish, cache_finish_nxt;
+    reg [BIT_W - 1: 0] output_data;
+    reg proc_stall;
+    reg cache_finish;
+    reg [4:0] vacant;
     assign o_proc_rdata = output_data;
-    assign o_proc_stall = proc_stall;
     assign o_proc_stall = proc_stall;
     assign o_cache_finish = cache_finish;
 
@@ -981,17 +982,14 @@ module Cache#(
     integer i;
     
     always @ (*) begin      // get hit, full and states
-        hit_nxt = 0;        // positive logic
-        full_nxt = Full;    // negative logic
-
         for (i = 0; i < LINE_NUM; i = i + 1) begin
-            hit_nxt = (cache [i][LINE_W - 3:LINE_W - 30] === i_proc_addr[BIT_W - 1:4]) ? Hit : hit_nxt;
-            full_nxt = (cache[i][LINE_W - 1] && full_nxt) ? Full : !Full;
+            hit = (cache [i][LINE_W - 3:LINE_W - 30] === i_proc_addr[BIT_W - 1:4]) ? Hit : Miss;
+            full = (cache[i][LINE_W - 1] && full) ? Full : !Full;
         end
 
      //decide state
-        casex ({i_proc_cen, i_proc_wen, i_mem_stall})
-            {1'b1, 1'b0, 1'b0}: begin //read
+        casex ({i_proc_cen, i_proc_wen, i_mem_stall, i_proc_finish})
+            {1'b1, 1'b0, 1'b0, 1'bx}: begin //read
                 case ({hit, full})
                     {Miss, !Full}: begin
                         state_nxt = ReadMissNot;
@@ -1010,7 +1008,7 @@ module Cache#(
                     end
                 endcase
             end
-            {1'b1, 1'b1, 1'b0}: begin //write
+            {1'b1, 1'b1, 1'b0, 1'b0}: begin //write
                 case ({hit, full})
                     {Miss, !Full}: begin
                         state_nxt = WriteMissNot;
@@ -1029,10 +1027,13 @@ module Cache#(
                     end
                 endcase
             end
-            {1'b0, 1'b0, 1'b0}: begin //neither send nor write
+            {1'b0, 1'b0, 1'b0, 1'bx}: begin //neither send nor write
                 state_nxt = Wait;
             end
-            {1'bx, 1'bx, 1'b1}:begin //stalled by memory
+            {1'b1, 1'b1, 1'b0, 1'b1}: begin
+                state_nxt = Wait;
+            end
+            {1'bx, 1'bx, 1'b1, 1'bx}:begin //stalled by memory
                 state_nxt = state;
             end
             default: begin
@@ -1042,279 +1043,82 @@ module Cache#(
     end
 
     always @ (*) begin
-        line_hit_nxt = 4'bxxxx;
-        for (i = 0; i < LINE_NUM; i = i + 1) begin // Sending
-            line_hit_nxt = (i_proc_addr[BIT_W - 1:4] === cache[i][LINE_W - 3:LINE_W - 30]) ? i : line_hit_nxt;
+        line_hit = 4'bxxxx;
+        for (i = 0; i < LINE_NUM; i = i + 1) begin
+            line_hit = (i_proc_addr[BIT_W - 1:4] === cache[i][LINE_W - 3:LINE_W - 30] && cache[i][1] === 1) ? i : 5'b11111;     // set false to 5'b11111
+            vacant = (cache[i][LINE_W - 2] === 0) ? i : 5'b11111;   // set false to 5'b11111
         end
 
         case (state)
             ReadMissNot: begin
-                if(!WB_flag && i_proc_cen) begin        // Allocating
-                    mem_cen_nxt = 1'b1;
-                    mem_wen_nxt = 1'b0;
-                    proc_stall_nxt = i_mem_stall;
-                    mem_addr_nxt = i_proc_addr;
-                    cache_finish_nxt = i_mem_stall ? 1'b0 : 1'b1;
-                    cache_data_nxt = {!Dirty, Valid, i_proc_addr[ADDR_W - 1: 4], i_mem_rdata};
-                    WB_flag_nxt = 1'b0;
-                    write_buffer_done_nxt = write_buffer_done;
-
-                    for (i = 0; i < LINE_NUM; i = i + 1) begin // Sending
-                        output_data_nxt = cache_finish ? ((i_proc_addr[ADDR_W - 1: 4] === cache[i][LINE_W - 3: LINE_W - 30]) ? (cache[i][i_proc_addr[3:2] * BIT_W +: 31]) : output_data_nxt) : output_data;
-                    end
-
-                    line_hit_nxt = line_hit;
-
-                end 
-                else if(WB_flag && i_proc_cen) begin    // Replacing
-                    mem_cen_nxt = mem_cen;
-                    mem_wen_nxt = mem_wen;
-                    proc_stall_nxt = 1'b1;
-                    mem_addr_nxt = write_buffer_addr;
-                    cache_finish_nxt = 1'b0;
-                    cache_data_nxt = cache[line_hit][127:0];
-                    WB_flag_nxt = !i_mem_stall;
-                    write_buffer_done_nxt = !i_mem_stall;
-                    output_data_nxt= output_data;
-                    line_hit_nxt = line_hit;
-                end
-                else begin
-                    mem_cen_nxt = mem_cen;
-                    mem_wen_nxt = mem_wen;
-                    proc_stall_nxt = proc_stall;
-                    mem_addr_nxt = mem_addr;
-                    cache_finish_nxt = cache_finish;
-                    cache_data_nxt = cache[line_hit][LINE_W - 1:0];
-                    WB_flag_nxt = WB_flag;
-                    write_buffer_done_nxt = write_buffer_done;
-                    output_data_nxt = output_data;
-                    line_hit_nxt = line_hit;
-                end
+                mem_cen = 1'b1;
+                mem_wen = 1'b0;
+                mem_addr = i_proc_addr[ADDR_W - 1:4] << 4;
+                cache_data_nxt = {1'b0, 1'b1, i_proc_addr[3:2], i_mem_rdata};
+                proc_stall = i_mem_stall;
+                output_data = i_mem_rdata[i_proc_addr[3:2] * BIT_W +: BIT_W];
             end
 
             ReadMissFull: begin
-                if(!write_buffer_done) begin        // write to write_buffer
-                    write_buffer_nxt = cache[i_proc_addr[29: 0] % 16][127: 0];
-                    write_buffer_addr_nxt = (cache[i_proc_addr[29: 0] % 16][LINE_W - 3: LINE_W - 30] << 4);
-                    write_buffer_done_nxt = 1'b1;
-                end
-                else write_buffer_done_nxt = write_buffer_done;
-
-                if(!WB_flag && i_proc_cen) begin        // Allocating
-                    mem_cen_nxt = 1'b1;
-                    mem_wen_nxt = 1'b0;
-                    proc_stall_nxt = i_mem_stall;
-                    mem_addr_nxt = i_proc_addr;
-                    cache_finish_nxt = i_mem_stall ? 1'b0 : 1'b1;
-                    cache_data_nxt = {!Dirty, Valid, i_proc_addr[ADDR_W - 1: 4], i_mem_rdata};
-                    WB_flag_nxt = 1'b0;
-                    for (i = 0; i < LINE_NUM; i = i + 1) begin // Sending
-                        output_data_nxt = cache_finish ? ((i_proc_addr[ADDR_W - 1: 4] === cache[i][LINE_W - 3: LINE_W - 30]) ? (cache[i][i_proc_addr[3:2] * BIT_W +: 31]) : output_data_nxt) : output_data;
-                    end
-                    write_buffer_done_nxt = write_buffer_done;
-                    line_hit_nxt = line_hit;
-
-                end 
-                else if(WB_flag && i_proc_cen) begin    // Replacing
-                    mem_cen_nxt = mem_cen;
-                    mem_wen_nxt = mem_wen;
-                    proc_stall_nxt = 1'b1;
-                    mem_addr_nxt = write_buffer_addr;
-                    cache_finish_nxt = 1'b0;
-                    cache_data_nxt = {1'b0, 1'b1, i_proc_addr[ADDR_W - 1: 4], i_mem_rdata};
-                    WB_flag_nxt = !i_mem_stall;
-                    output_data_nxt= output_data;
-                    write_buffer_done_nxt = write_buffer_done;
-                    line_hit_nxt = line_hit;
-                end
-                else begin
-                    mem_cen_nxt = mem_cen;
-                    mem_wen_nxt = mem_wen;
-                    proc_stall_nxt = proc_stall;
-                    mem_addr_nxt = mem_addr;
-                    output_data_nxt = output_data;
-                    cache_finish_nxt = cache_finish;
-                    cache_data_nxt = {1'b0, 1'b1, i_proc_addr[ADDR_W - 1: 4], i_mem_rdata};
-                    WB_flag_nxt = WB_flag;
-                    write_buffer_done_nxt = write_buffer_done;
-                    line_hit_nxt = line_hit;
-                end
+                
             end
 
             ReadHitX: begin
-                mem_cen_nxt = mem_cen;
-                mem_wen_nxt = mem_wen;
-                proc_stall_nxt = 1'b0;      // possibly has a read for stall
-                mem_addr_nxt = mem_addr;
-                cache_finish_nxt = 1'b1;
-                cache_data_nxt = cache[line_hit][LINE_W - 1:0];
-                for (i = 0; i < LINE_NUM; i = i + 1) begin
-                    output_data_nxt = cache_finish ? ((i_proc_addr[ADDR_W - 1: 4] === cache[i][LINE_W - 3: LINE_W - 30]) ? (cache[i][i_proc_addr[3:2] * BIT_W +: 31]) : output_data_nxt) : output_data;
-                end
-                WB_flag_nxt = WB_flag;
-                write_buffer_done_nxt = write_buffer_done;
-                line_hit_nxt = line_hit;
+               output_data = cache[line_hit][i_proc_addr[3:2] * BIT_W +: BIT_W];
+               cache_finish = 1'b1;
             end
             WriteMissNot: begin
-                if(!WB_flag && i_proc_cen) begin        // Allocating
-                    mem_cen_nxt = 1'b1;
-                    mem_wen_nxt = 1'b0;
-                    proc_stall_nxt = i_mem_stall;
-                    mem_addr_nxt = i_proc_addr;
-                    cache_finish_nxt = i_mem_stall ? 1'b0 : 1'b1;
-                    cache_data_nxt = {1'b0, 1'b1, i_proc_addr[ADDR_W - 1: 4], i_mem_rdata};
-                    cache_data_nxt[i_proc_addr[3:2] * BIT_W +: 31] = i_proc_wdata;
-                    WB_flag_nxt = 1'b0;
-                    write_buffer_done_nxt = write_buffer_done;
-                    line_hit_nxt = line_hit;
-                end 
-                else if(WB_flag && i_proc_cen) begin    // Replacing
-                    mem_cen_nxt = mem_cen;
-                    mem_wen_nxt = mem_wen;
-                    proc_stall_nxt = 1'b1;
-                    mem_addr_nxt = write_buffer_addr;
-                    cache_finish_nxt = 1'b0;
-                    cache_data_nxt = 157'b0;
-                    WB_flag_nxt = !i_mem_stall;
-                    write_buffer_done_nxt = !i_mem_stall;
-                    output_data_nxt= output_data;
-                    line_hit_nxt = line_hit;
-                end
-                else begin
-                    mem_cen_nxt = mem_cen;
-                    mem_wen_nxt = mem_wen;
-                    proc_stall_nxt = proc_stall;
-                    mem_addr_nxt = mem_addr;
-                    cache_finish_nxt = cache_finish;
-                    cache_data_nxt = 157'b0;
-                    WB_flag_nxt = WB_flag;
-                    write_buffer_done_nxt = write_buffer_done;
-                    output_data_nxt = output_data;
-                    line_hit_nxt = line_hit;
-                end
+                mem_cen = 1'b1;
+                mem_wen = 1'b0;
+                mem_addr = i_proc_addr[ADDR_W - 1:4] << 4;
+                cache_data_nxt = {1'b1, 1'b1, i_proc_addr[3:2], i_mem_rdata};
+                cache_data_nxt[i_proc_addr[3:2] * BIT_W +: BIT_W] = i_proc_wdata;
+                proc_stall = i_mem_stall;
             end
 
             WriteHitX: begin
-                mem_cen_nxt = mem_cen;
-                mem_wen_nxt = mem_wen;
-                proc_stall_nxt = 1'b0;      // possibly has a read for stall
-                mem_addr_nxt = mem_addr;
-                cache_finish_nxt = 1'b1;
-                cache_data_nxt = {1'b0, 1'b1, i_proc_addr[ADDR_W - 1: 4], i_mem_rdata};
-                cache_data_nxt[i_proc_addr[3:2] * BIT_W +: 31] = i_proc_wdata;
-                WB_flag_nxt = WB_flag;
-                write_buffer_done_nxt = write_buffer_done;
-                output_data_nxt = output_data;
-                line_hit_nxt = line_hit;
+                cache[line_hit][i_proc_addr[3:2] * BIT_W +: BIT_W] = i_proc_wdata;
+                cache[line_hit][LINE_W - 1] = 1'b1;
+                cache_finish = 1'b1;
             end
 
             WriteMissFull: begin
-                if(!write_buffer_done) begin        // write to write_buffer
-                    write_buffer_nxt = cache[i_proc_addr[29: 0] % 16][127: 0];
-                    write_buffer_addr_nxt = (cache[i_proc_addr[29: 0] % 16][LINE_W - 3: LINE_W - 30] << 4);
-                    write_buffer_done_nxt = 1'b1;
-                end
-                else write_buffer_done_nxt = write_buffer_done;
-
-                if(!WB_flag && i_proc_cen) begin        // Allocating
-                    mem_cen_nxt = 1'b1;
-                    mem_wen_nxt = 1'b0;
-                    proc_stall_nxt = i_mem_stall;
-                    mem_addr_nxt = i_proc_addr;
-                    cache_finish_nxt = i_mem_stall ? 1'b0 : 1'b1;
-                    cache_data_nxt = {1'b0, 1'b1, i_proc_addr[ADDR_W - 1: 4], i_mem_rdata};
-                    cache_data_nxt[i_proc_addr[3:2] * BIT_W +: 31] = i_proc_wdata;
-                    WB_flag_nxt = 1'b0;
-                    write_buffer_done_nxt = write_buffer_done;
-                    line_hit_nxt = line_hit;
-                end 
-                else if(WB_flag && i_proc_cen) begin    // Replacing
-                    mem_cen_nxt = mem_cen;
-                    mem_wen_nxt = mem_wen;
-                    proc_stall_nxt = 1'b1;
-                    mem_addr_nxt = write_buffer_addr;
-                    cache_finish_nxt = 1'b0;
-                    cache_data_nxt = {1'b0, 1'b1, i_proc_addr[ADDR_W - 1: 4], i_mem_rdata};
-                    WB_flag_nxt = !i_mem_stall;
-                    output_data_nxt = output_data;
-                    write_buffer_done_nxt = WB_flag ? write_buffer_done: 1'b1;
-                    line_hit_nxt = line_hit;
-                end
-                else begin
-                    mem_cen_nxt = mem_cen;
-                    mem_wen_nxt = mem_wen;
-                    proc_stall_nxt = proc_stall;
-                    mem_addr_nxt = mem_addr;
-                    output_data_nxt = output_data;
-                    cache_finish_nxt = cache_finish;
-                    cache_data_nxt = {1'b0, 1'b1, i_proc_addr[ADDR_W - 1: 4], i_mem_rdata};
-                    WB_flag_nxt = WB_flag;
-                    write_buffer_done_nxt = write_buffer_done;
-                    line_hit_nxt = line_hit;
-                end
+               
             end
 
             noChange: begin
-                mem_cen_nxt = mem_cen;
-                mem_wen_nxt = mem_wen;
-                proc_stall_nxt = i_mem_stall;
-                mem_addr_nxt = mem_addr;
-                output_data_nxt = output_data;
-                cache_finish_nxt = cache_finish;
-                cache_data_nxt = {1'b0, 1'b1, i_proc_addr[ADDR_W - 1: 4], i_mem_rdata};
-                WB_flag_nxt = WB_flag;
-                write_buffer_done_nxt = write_buffer_done;
-                line_hit_nxt = line_hit;
+                cache_finish = i_mem_stall ? 1'b0 : 1'b1;
+                mem_cen = i_proc_cen;
+                mem_wen = i_proc_wen;
+                mem_addr = i_proc_addr[ADDR_W - 1:4] << 4;
+                cache_data_nxt = {1'b0, 1'b0, i_proc_addr[3:2], i_mem_rdata};
+                proc_stall = i_mem_stall;
+                output_data = i_mem_rdata[i_proc_addr[3:2] * BIT_W +: BIT_W];
+  
             end
 
-            Wait: begin     // start WB now
-                if(i_proc_finish) begin
-                    mem_cen_nxt = 1'b1;
-                    mem_wen_nxt = 1'b1;
-                    proc_stall_nxt = 1'b1;
-                    output_data_nxt = output_data;
-                    cache_finish_nxt = 1'b0;
-                    cache_data_nxt = {1'b0, 1'b1, i_proc_addr[ADDR_W - 1: 4], i_mem_rdata};
-                    WB_flag_nxt = 1'b0;
-                    write_buffer_done_nxt = 1'b1;
-                    line_hit_nxt = line_hit;
-                end
-                else if(!write_buffer_done) begin
-                    mem_cen_nxt = 1'b1;
-                    mem_wen_nxt = 1'b1;
-                    WB_flag_nxt = 1'b1;
-                    proc_stall_nxt = 1'b0;
-                    output_data_nxt = output_data;
-                    cache_finish_nxt = 1'b0;
-                    cache_data_nxt = {1'b0, 1'b1, i_proc_addr[ADDR_W - 1: 4], i_mem_rdata};
-                    write_buffer_done_nxt = i_mem_stall ? 1'b0 : 1'b1;              
-                    line_hit_nxt = line_hit;
+            Wait: begin
+                if(!i_proc_finish) begin
+                    cache_finish = 1'b0;
+                    mem_cen = i_proc_cen;
+                    mem_wen = i_proc_wen;
+                    mem_addr = i_proc_addr[ADDR_W - 1:4] << 4;
+                    cache_data_nxt = {1'b0, 1'b0, i_proc_addr[3:2], i_mem_rdata};
+                    proc_stall = i_mem_stall;
+                    output_data = i_mem_rdata[i_proc_addr[3:2] * BIT_W +: BIT_W];
                 end
                 else begin
-                    mem_cen_nxt = mem_cen;
-                    mem_wen_nxt = mem_wen;
-                    proc_stall_nxt = i_mem_stall;
-                    mem_addr_nxt = mem_addr;
-                    output_data_nxt = output_data;
-                    cache_finish_nxt = cache_finish;
-                    cache_data_nxt = {1'b0, 1'b1, i_proc_addr[ADDR_W - 1: 4], i_mem_rdata};
-                    WB_flag_nxt = WB_flag;
-                    write_buffer_done_nxt = write_buffer_done;
-                    line_hit_nxt = line_hit;
+                    cache_finish = 1'b0;
+                    mem_cen = 1'b1;
+                    mem_wen = 1'b1;
+                    for(i = 0; i < LINE_NUM; i = i + 1) begin
+                        if(cache[i][LINE_W - 1] === 1) begin
+                            mem_addr = cache[i][LINE_W - 3:LINE_W - 30] << 4;
+                            mem_wdata = cache[i][127:0];
+                        end
+                    end
+                    proc_stall = 1'b1;
                 end
-            end
-
-            default: begin
-                mem_cen_nxt = mem_cen;
-                mem_wen_nxt = mem_wen;
-                proc_stall_nxt = proc_stall;
-                mem_addr_nxt = mem_addr;
-                output_data_nxt = output_data;
-                cache_finish_nxt = cache_finish;
-                cache_data_nxt = {1'b0, 1'b1, i_proc_addr[ADDR_W - 1: 4], i_mem_rdata};
-                WB_flag_nxt = WB_flag;
-                write_buffer_done_nxt = write_buffer_done;
-                line_hit_nxt = line_hit;
             end
         endcase
     
@@ -1327,53 +1131,25 @@ module Cache#(
             hit <= 0;
             full <= 0;
             dirty <= 0;
-            WB_flag <= 0;
             mem_cen <= 0;
             mem_wen <= 0;
-            write_buffer_addr <= 0;
-            write_buffer <= 0;
             for (i = 0; i < LINE_NUM; i = i + 1) begin
                 cache[i][LINE_W - 1: 0] <= 157'b0;
             end
-            output_data <= 0;
-            proc_stall <= 0;
-            cache_finish <= 0;
         end
         else if(i_proc_finish) begin
+            mem_cen <= 1;
+            mem_wen <= 1;
             state <= state_nxt;
-            hit <= hit_nxt;
-            full <= full_nxt;
-            dirty <= dirty_nxt;
-            WB_flag <= WB_flag_nxt;
-            mem_cen <= mem_cen_nxt;
-            mem_wen <= mem_wen_nxt;
-            // for (i = 0; i < LINE_NUM; i = i + 1) begin
-            //     mem_addr <= cache[i][LINE_W - 1] ? (cache[i][LINE_W - 3: LINE_W - 30] << 4) : mem_addr;
-            //     mem_wdata <= cache[i][LINE_W - 1] ? cache[i][127: 0] : mem_wdata;
-            // end
             for (i = 0; i < LINE_NUM; i = i + 1) begin
-                write_buffer_addr <= cache[i][LINE_W - 1] ? (cache[i][LINE_W - 3: LINE_W - 30] << 4) : write_buffer_addr_nxt;
-                write_buffer <= cache[i][LINE_W - 1] ? cache[i][127: 0] : write_buffer_nxt;
+                if(cache[i][LINE_W - 1] === 1) begin
+                                        
+                end
             end
-            cache[line_hit][LINE_W - 1: 0] <= cache_data_nxt;
-            output_data <= output_data_nxt;
-            proc_stall <= proc_stall_nxt;  
-            cache_finish <= cache_finish_nxt;
         end
         else begin
             state <= state_nxt;
-            hit <= hit_nxt;
-            full <= full_nxt;
-            dirty <= dirty_nxt;
-            WB_flag <= WB_flag_nxt;
-            mem_cen <= mem_cen_nxt;
-            mem_wen <= mem_wen_nxt;
-            write_buffer_addr <= write_buffer_addr_nxt;
-            write_buffer <= write_buffer_nxt;
-            cache[line_hit][LINE_W - 1: 0] <= cache_data_nxt;
-            output_data <= output_data_nxt;
-            proc_stall <= proc_stall_nxt;  
-            cache_finish <= cache_finish_nxt;
+            cache[vacant][LINE_W - 1: 0] <= cache_data_nxt;
         end
     end
     // Todo: BONUS
