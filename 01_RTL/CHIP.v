@@ -958,13 +958,13 @@ module Cache#(
     //------------------------------------------//
     integer i;
     
-    always(*) begin //get hit and full
-        hit_nxt = 0;
-        full_nxt = 1;
+    always(*) begin         //get hit and full
+        hit_nxt = 0;        // positive logic
+        full_nxt = Full;    // negative logic
 
         for (i = 0; i < LINE_NUM; i = i + 1) begin
-            hit_nxt = (cache [LINE_W - 3:LINE_W - 30][i] === i_proc_addr[BIT_W - 1:4]) ? 1 : hit_nxt;
-            full_nxt = (cache[LINE_W - 1][i] && full_nxt) ? 1 : 0;
+            hit_nxt = (cache [LINE_W - 3:LINE_W - 30][i] === i_proc_addr[BIT_W - 1:4]) ? Hit : hit_nxt;
+            full_nxt = (cache[LINE_W - 1][i] && full_nxt) ? Full : !Full;
         end
 
     end
