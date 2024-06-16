@@ -916,6 +916,7 @@ module Cache#(
     parameter WriteHitX = 3'b100;       // 1-6 1-8
     parameter WriteMissFull = 3'b101;   // 1-7
     parameter noChange = 3'b110;        // 1-9 // 2-9
+    parameter Wait = 3'b111;           
     
     // useful parameters
     parameter LINE_W = 158;
@@ -936,7 +937,8 @@ module Cache#(
     reg state, state_nxt;
 
     // memory interface
-    reg mem_cen, mem_wen;
+    reg mem_cen, mem_cen_nxt;
+    reg mem_wen, mem_wen_nxt;
 
     assign o_mem_addr = write_buffer_addr;
     assign o_mem_wdata = write_buffer;
@@ -958,7 +960,7 @@ module Cache#(
     //------------------------------------------//
     integer i;
     
-    always(*) begin         //get hit and full
+    always @ (*) begin         //get hit and full
         hit_nxt = 0;        // positive logic
         full_nxt = Full;    // negative logic
 
@@ -967,22 +969,21 @@ module Cache#(
             full_nxt = (cache[LINE_W - 1][i] && full_nxt) ? Full : !Full;
         end
 
-    end
 
-    always(*) begin //decide state
+     //decide state
         case ({i_proc_cen, i_proc_wen})
             {1'b1, 1'b0}: begin //read
                 case ({hit, full})
-                    {1'b0, 1'b0}: begin
+                    {Miss, !Full}: begin
                         state_nxt = ReadMissNot;
                     end
-                    {1'b0, 1'b1}: begin
+                    {Miss, Full}: begin
                         state_nxt = ReadMissFull;
                     end
-                    {1'b1, 1'b0}: begin
+                    {Hit, !Full}: begin
                         state_nxt = ReadHitX;
                     end
-                    {1'b1, 1'b1}: begin
+                    {Hit, Full}: begin
                         state_nxt = ReadHitX;
                     end
                     default: begin
@@ -992,16 +993,16 @@ module Cache#(
             end
             {1'b1, 1'b1}: begin //write
                 case ({hit, full})
-                    {1'b0, 1'b0}: begin
+                    {Miss, !Full}: begin
                         state_nxt = WriteMissNot;
                     end
-                    {1'b0, 1'b1}: begin
+                    {Miss, Full}: begin
                         state_nxt = WriteMissFull;
                     end
-                    {1'b1, 1'b0}: begin
+                    {Hit, !Full}: begin
                         state_nxt = WriteHitX;
                     end
-                    {1'b1, 1'b1}: begin
+                    {Hit, Full}: begin
                         state_nxt = WriteHitX;
                     end
                     default: begin
@@ -1015,14 +1016,30 @@ module Cache#(
         endcase
     end
 
-    // always @(posedge i_clk or negedge i_rst_n) begin
-    //     if (!i_rst_n ) begin
-            
-    //     end
-    //     else begin
-            
-    //     end
-    // end
+    always @(posedge i_clk or negedge i_rst_n) begin
+        if (!i_rst_n ) begin
+            state <= Wait;
+            hit <= 0;
+            full <= 0;
+            dirty <= 0;
+            WB_flag <= 0;
+            mem_cen <= 0;
+            mem_wen <= 0;
+            write_buffer_addr <= 0;
+            write_buffer <= 0;
+        end
+        else begin
+            state <= state_nxt;
+            hit <= hit_nxt;
+            full <= full_nxt;
+            dirty <= dirty_nxt;
+            WB_flag <= WB_flag_nxt;
+            mem_cen <= mem_cen_nxt;
+            mem_wen <= mem_wen_nxt;
+            write_buffer_addr <= write_buffer_addr_nxt;
+            write_buffer <= write_buffer_nxt;
+        end
+    end
     // Todo: BONUS
 
 endmodule
