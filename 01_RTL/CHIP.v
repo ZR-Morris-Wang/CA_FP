@@ -897,7 +897,6 @@ module Cache#(
 
     assign o_cache_available = 1; // change this value to 1 if the cache is implemented
 
-
     // parameters
     parameter Not_Called = 1'b0;
     parameter Called = 1'b1;
@@ -934,9 +933,9 @@ module Cache#(
     // regs and wires 
     reg [LINE_W - 1:0] cache [0:15]; // 16 lines, 4 words
     reg [LINE_W - 1:0] cache_data_nxt;
-    reg [127:0] write_buffer, write_buffer_nxt;    // minus dirty and valid. addr 照樣從 tag 再 left shift 4 bits
+    reg [4 * BIT_W - 1:0] write_buffer, write_buffer_nxt;    // minus dirty and valid. addr 照樣從 tag 再 left shift 4 bits
     reg [ADDR_W:0] write_buffer_addr, write_buffer_addr_nxt;
-    reg write_buffer_done, write_buffer_done_nxt;
+    reg write_buffer_done, write_buffer_done_nxt; 
 
     // reg [27:0] tag                   // incoming tag 可以直接從 i_proc_addr 切
     // reg [1:0] block_offset           // incoming offset 可以直接從 i_proc_addr 切
@@ -967,6 +966,7 @@ module Cache#(
     reg cache_finish, cache_finish_nxt;
     assign o_proc_rdata = output_data;
     assign o_proc_stall = proc_stall;
+    assign o_proc_stall = proc_stall;
     assign o_cache_finish = cache_finish;
 
     //------------------------------------------//
@@ -980,7 +980,7 @@ module Cache#(
     //------------------------------------------//
     integer i;
     
-    always @ (*) begin         //get hit, full and states
+    always @ (*) begin      // get hit, full and states
         hit_nxt = 0;        // positive logic
         full_nxt = Full;    // negative logic
 
@@ -988,7 +988,6 @@ module Cache#(
             hit_nxt = (cache [i][LINE_W - 3:LINE_W - 30] === i_proc_addr[BIT_W - 1:4]) ? Hit : hit_nxt;
             full_nxt = (cache[i][LINE_W - 1] && full_nxt) ? Full : !Full;
         end
-
 
      //decide state
         case ({i_proc_cen, i_proc_wen})
