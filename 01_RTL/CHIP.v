@@ -156,8 +156,8 @@ module CHIP #(                                                                  
         assign o_IMEM_addr = PC;
 
         //termination
-        assign o_finish = ecallreg;
-        assign o_proc_finish = procreg;
+        assign o_proc_finish = ecallreg;
+        assign o_finish = i_cache_finish;
 
         //Reg_file
         assign rs1 = register_source_1; 
@@ -263,11 +263,9 @@ module CHIP #(                                                                  
         case (i_IMEM_data)
             32'h73: begin
                 ecallreg = 1;
-                procreg = 1;
             end
             default: begin
                 ecallreg = 0;
-                procreg = 0;
             end
         endcase
 
@@ -941,6 +939,7 @@ module Cache#(
     // reg [27:0] tag                   // incoming tag 可以直接從 i_proc_addr 切
     reg [1:0] block_offset;           // incoming offset 可以直接從 i_proc_addr 切
 
+    reg notsavedflag;
     reg full;
     reg hit;
     reg dirty;
@@ -967,9 +966,12 @@ module Cache#(
     reg proc_stall;
     reg cache_finish;
     reg [4:0] vacant;
+    reg cache_finish;
+    reg all_data_to_mem;
+    reg [4:0] saved_cache_index, saved_cache_index_nxt;
     assign o_proc_rdata = output_data;
     assign o_proc_stall = proc_stall;
-    assign o_cache_finish = cache_finish;
+    assign o_cache_finish = all_data_to_mem;
 
     //------------------------------------------//
     //          default connection              //
@@ -1051,7 +1053,7 @@ module Cache#(
         line_hit = 5'b11111;
         for (i = 0; i < LINE_NUM; i = i + 1) begin
             line_hit = (i_proc_addr[BIT_W - 1:4] === cache[i][LINE_W - 3:LINE_W - 30] && cache[i][LINE_W - 2] === 1 && (i_proc_addr[3:2] >= base[i])) ?  i : (line_hit !== 5'b11111) ? line_hit + 0 : 5'b11111;     // set false to 5'b11111    如果有 latch 就寫開
-            vacant = (cache[i][LINE_W - 2] === 0) ? i : (i !== 0) ? (i - 1) : 5'b11111;   // set false to 5'b11111, if vacant is 5'b11111 then cache is full
+            vacant = (cache[i][LINE_W - 2] === 0) ? i : (vacant !== 5'b11111) ? (vacant + 0) : 5'b11111;   // set false to 5'b11111, if vacant is 5'b11111 then cache is full
         end
 
         case (state)
@@ -1117,9 +1119,14 @@ module Cache#(
             end
 
             WriteHitX: begin
-                cache[line_hit][(i_proc_addr[3:2] - base[line_hit]) * BIT_W +: BIT_W] = i_proc_wdata;
-                cache[line_hit][LINE_W - 1] = 1'b1;
-                cache_finish = 1'b1;
+                if(i_proc_cen) begin
+                    cache[line_hit][(i_proc_addr[3:2] - base[line_hit]) * BIT_W +: BIT_W] = i_proc_wdata;
+                    cache[line_hit][LINE_W - 1] = 1'b1;
+                    cache_finish = 1'b1;
+                end
+                else begin
+                    cache_data_nxt = cache[vacant];
+                end
             end
 
             WriteMissFull: begin
@@ -1139,6 +1146,7 @@ module Cache#(
 
             Wait: begin
                 if(!i_proc_finish) begin
+                    $display("usually here");
                     cache_finish = !i_mem_stall;
 
                     if(!hit && i_proc_cen) begin
@@ -1159,7 +1167,7 @@ module Cache#(
                         output_data = cache[line_hit][(i_proc_addr[3:2] - base[line_hit]) * BIT_W +: BIT_W];
                     end
                     else begin  // !i_proc_cen
-                        cache_data_nxt = cache[vacant];
+                        cache_data_nxt = hit ? cache[line_hit] : cache[vacant];
                         proc_stall = i_mem_stall;
                         cache_finish = !i_mem_stall;
                         mem_cen = cache_finish ? 1'b0 : 1'b1;
@@ -1168,30 +1176,54 @@ module Cache#(
                         output_data = 32'bx;
                     end
                 end
-                else begin
-                    cache_finish = !i_mem_stall;
-                    mem_cen = 1'b1;
-                    mem_wen = 1'b1;
-                    for(i = 0; i < LINE_NUM; i = i + 1) begin
-                        if(cache[i][LINE_W - 1] === 1) begin
-                            mem_addr = (cache[i][LINE_W - 3:LINE_W - 30] << 4) + 4;
-                            mem_wdata = cache[i][127:0];
-                        end
-                    end
-
-                    if(!hit) begin
-                        cache_data_nxt = i_mem_stall ? {1'b0, 1'b1, i_proc_addr[ADDR_W - 1:4], i_mem_rdata} : cache[vacant];
-                    end
-                    else begin
-                        cache_data_nxt = i_mem_stall ? {1'b0, 1'b1, i_proc_addr[ADDR_W - 1:4], i_mem_rdata} : cache[line_hit];
-                    end
-                        proc_stall = 1'b1;
-                end
             end
         endcase
     
     end
 
+    always @(*) begin
+        if (i_proc_finish && saved_cache_index <= LINE_NUM - 1) begin
+            if(cache[saved_cache_index][LINE_W - 1] == 1 && i_mem_stall == 0)begin
+                saved_cache_index_nxt = saved_cache_index + 1;
+                $display("%d is dirty", saved_cache_index);
+                $display("%d is dirty", saved_cache_index_nxt);
+                mem_cen = 1'b1;
+                mem_wen = 1'b1;
+                mem_addr = {cache[saved_cache_index][LINE_W - 3:LINE_W - 30], base[saved_cache_index]} << 2;
+                mem_wdata = cache[saved_cache_index][127:0];
+                $display("cen: %d", mem_cen);
+                $display("wen: %d", mem_wen);
+                $display("stall: %d", mem_wen);
+            end
+            else if (i_mem_stall == 1)begin
+                // mem_cen = 1'b0;
+                // mem_wen = 1'b0;
+                // mem_addr = 0;
+                // mem_wdata = 0;
+                saved_cache_index_nxt = saved_cache_index;    
+            end
+            else begin
+                mem_cen = 1'b0;
+                mem_wen = 1'b0;
+                mem_addr = 0;
+                mem_wdata = 0;
+                saved_cache_index_nxt = saved_cache_index + 1;    
+            end
+        end
+        else begin
+            saved_cache_index = 1'b0;
+            all_data_to_mem = 1'b0;
+        end
+    end
+
+    always @(*) begin
+        if(saved_cache_index == LINE_NUM - 1) begin
+            all_data_to_mem = 1'b1;     
+        end
+        else begin
+            all_data_to_mem = 1'b0;
+        end
+    end
 
     always @(posedge i_clk or negedge i_rst_n) begin
         if (!i_rst_n ) begin
@@ -1201,22 +1233,33 @@ module Cache#(
             dirty <= 0;
             mem_cen <= 0;
             mem_wen <= 0;
+            all_data_to_mem <= 0;
+            notsavedflag <= 0;
+            
             for (i = 0; i < LINE_NUM; i = i + 1) begin
                 cache[i][LINE_W - 1: 0] <= 158'b0;
             end
         end
-        else if(i_proc_finish) begin
-            mem_cen <= 1;
-            mem_wen <= 1;
-            state <= state_nxt;
-            for (i = 0; i < LINE_NUM; i = i + 1) begin
-                if(cache[i][LINE_W - 1] === 1) begin
-                                        
-                end
-            end
-        end
+        // else if(i_proc_finish) begin
+        //     $display("here?");
+        //     mem_cen <= 1;
+        //     mem_wen <= 1;
+        //     state <= state_nxt;
+        //     for(i = 0; i < LINE_NUM; i = i + 1) begin
+        //         if(cache[i][LINE_W - 1] === 1 && !i_mem_stall) begin
+        //             mem_addr <= {cache[i][LINE_W - 3:LINE_W - 30], base[i]} << 2;
+        //             mem_wdata <= cache[i][127:0];
+        //         end
+        //     end
+        //     for(i = 0; i < LINE_NUM; i = i + 1) begin
+        //         notsavedflag <= (notsavedflag) || cache[i][LINE_W - 1];
+        //     end
+        //     if(notsavedflag === 0) all_data_to_mem <= (mem_addr === 32'bx && mem_wdata === 32'bx) ? 1'b1 : 1'b0;
+
+        // end
         else begin
             state <= state_nxt;
+            saved_cache_index <= saved_cache_index_nxt;
             if(!hit && cache_finish) begin
                 cache[vacant][LINE_W - 1: 0] <= cache_data_nxt;
             end
@@ -1225,6 +1268,9 @@ module Cache#(
             end
         end
     end
+
+
+
     // Todo: BONUS
 
 endmodule
