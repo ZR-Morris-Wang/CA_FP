@@ -1048,9 +1048,9 @@ module Cache#(
             end
         endcase
 
-        line_hit = 4'bxxxx;
+        line_hit = 5'b11111;
         for (i = 0; i < LINE_NUM; i = i + 1) begin
-            line_hit = (i_proc_addr[BIT_W - 1:4] === cache[i][LINE_W - 3:LINE_W - 30] && cache[i][LINE_W - 2] === 1) ? i : 5'b11111;     // set false to 5'b11111
+            line_hit = (i_proc_addr[BIT_W - 1:4] === cache[i][LINE_W - 3:LINE_W - 30] && cache[i][LINE_W - 2] === 1 && (i_proc_addr[3:2] >= base[i])) ?  i : (line_hit !== 5'b11111) ? line_hit + 0 : 5'b11111;     // set false to 5'b11111    如果有 latch 就寫開
             vacant = (cache[i][LINE_W - 2] === 0) ? i : (i !== 0) ? (i - 1) : 5'b11111;   // set false to 5'b11111, if vacant is 5'b11111 then cache is full
         end
 
@@ -1108,7 +1108,6 @@ module Cache#(
                 end
             end
             WriteMissNot: begin
-                $display("WMN");
                 mem_cen = 1'b1;
                 mem_wen = 1'b0;
                 mem_addr = i_proc_addr[ADDR_W - 1:4] << 4;
@@ -1118,7 +1117,7 @@ module Cache#(
             end
 
             WriteHitX: begin
-                cache[line_hit][i_proc_addr[3:2] * BIT_W +: BIT_W] = i_proc_wdata;
+                cache[line_hit][(i_proc_addr[3:2] - base[line_hit]) * BIT_W +: BIT_W] = i_proc_wdata;
                 cache[line_hit][LINE_W - 1] = 1'b1;
                 cache_finish = 1'b1;
             end
