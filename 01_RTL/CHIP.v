@@ -945,6 +945,7 @@ module Cache#(
     reg hit;
     reg dirty;
     reg [4:0]line_hit;
+    reg [1:0] base [0:LINE_NUM - 1];
     // reg RW, RW_nxt;                  // can be o_proc_cen ^ o_proc_wen
     reg [2:0] state, state_nxt;
 
@@ -984,8 +985,8 @@ module Cache#(
     always @ (*) begin      // get hit, full and states
         if(i_proc_cen || i_proc_wen) begin
             for (i = 0; i < LINE_NUM; i = i + 1) begin
-                hit = ((cache [i][LINE_W - 3:LINE_W - 30] === i_proc_addr[BIT_W - 1:4]) && (cache[i][LINE_W - 2] === 1)) ? Hit : Miss;
-                full = (cache[i][LINE_W - 1] && full) ? Full : !Full;
+                hit = ((cache [i][LINE_W - 3:LINE_W - 30] === i_proc_addr[BIT_W - 1:4]) && (cache[i][LINE_W - 2] === 1)) ? (Hit || hit) : (Miss || hit);
+                full = (cache[i][LINE_W - 2] && full) ? Full : !Full;
             end
         end
         else begin
@@ -1056,24 +1057,34 @@ module Cache#(
         case (state)
             ReadMissNot: begin
                 block_offset = i_proc_addr[3:2];
-                if(!hit) begin
+                if(!hit && i_proc_cen) begin
                     cache_data_nxt = cache_finish ? {1'b0, 1'b1, i_proc_addr[ADDR_W - 1:4], i_mem_rdata} : cache[vacant];
                     proc_stall = i_mem_stall;
                     cache_finish = !i_mem_stall;
                     mem_cen = cache_finish ? 1'b0 : 1'b1;
                     mem_wen = 1'b0;
                     mem_addr = i_proc_addr;
+                    output_data = i_mem_rdata[(i_proc_addr[3:2] - base[vacant]) * BIT_W +: BIT_W];
+
                 end
-                else begin
+                else if (hit && i_proc_cen) begin
                     cache_data_nxt = cache_finish ? {1'b0, 1'b1, i_proc_addr[ADDR_W - 1:4], i_mem_rdata} : cache[line_hit];
                     proc_stall = 1'b0;
                     cache_finish = !i_mem_stall;
                     mem_cen = cache_finish ? 1'b0 : 1'b1;
                     mem_wen = 1'b0;
                     mem_addr = i_proc_addr;
+                    output_data = cache[line_hit][(i_proc_addr[3:2] - base[line_hit]) * BIT_W +: BIT_W];
                 end
-                
-                output_data = hit ? cache[line_hit][i_proc_addr[3:2] * BIT_W +: BIT_W] : 32'bx;
+                else begin  // !i_proc_cen
+                    cache_data_nxt = cache[vacant];
+                    proc_stall = i_mem_stall;
+                    cache_finish = !i_mem_stall;
+                    mem_cen = cache_finish ? 1'b0 : 1'b1;
+                    mem_wen = 1'b0;
+                    mem_addr = i_proc_addr;
+                    output_data = 32'bx;
+                end
             end
 
             ReadMissFull: begin
@@ -1081,9 +1092,20 @@ module Cache#(
             end
 
             ReadHitX: begin
-               cache_data_nxt = cache[line_hit];
-               output_data = cache[line_hit][i_proc_addr[3:2] * BIT_W +: BIT_W];
-               cache_finish = 1'b1;
+                if(i_proc_cen) begin
+                    cache_data_nxt = cache[line_hit];
+                    output_data = cache[line_hit][(i_proc_addr[3:2] - base[line_hit]) * BIT_W +: BIT_W];
+                    cache_finish = 1'b1;
+                end
+                else begin
+                    cache_data_nxt = cache[vacant];
+                    proc_stall = i_mem_stall;
+                    cache_finish = !i_mem_stall;
+                    mem_cen = 1'b0;
+                    mem_wen = 1'b0;
+                    mem_addr = i_proc_addr;
+                    output_data = 32'bx;
+                end
             end
             WriteMissNot: begin
                 $display("WMN");
@@ -1112,7 +1134,7 @@ module Cache#(
                 mem_addr = i_proc_addr;
                 cache_data_nxt = {1'b0, 1'b0, i_proc_addr[31:4], i_mem_rdata};
                 proc_stall = i_mem_stall;
-                output_data = i_mem_rdata[i_proc_addr[3:2] * BIT_W +: BIT_W];
+                output_data = cache[vacant][(i_proc_addr[3:2] - base[vacant]) * BIT_W +: BIT_W];
   
             end
 
@@ -1120,23 +1142,32 @@ module Cache#(
                 if(!i_proc_finish) begin
                     cache_finish = !i_mem_stall;
 
-                    if(!hit) begin
-                        cache_data_nxt = cache[vacant];
+                    if(!hit && i_proc_cen) begin
+                        cache_data_nxt = i_mem_stall ? {1'b0, 1'b1, i_proc_addr[ADDR_W - 1:4], i_mem_rdata} : cache[vacant];
                         proc_stall = i_mem_stall;
                         mem_cen = i_proc_cen;
                         mem_wen = i_proc_wen;
                         mem_addr = i_proc_addr;
+                        base[vacant] = i_proc_addr[3:2];
+                        output_data = i_mem_rdata[(i_proc_addr[3:2] - base[vacant]) * BIT_W +: BIT_W];
                     end
-                    else begin
-                        cache_data_nxt = cache[line_hit];
+                    else if(hit && i_proc_cen) begin
+                        cache_data_nxt = i_mem_stall ? {1'b0, 1'b1, i_proc_addr[ADDR_W - 1:4], i_mem_rdata} : cache[line_hit];
                         proc_stall = 1'b0;
                         mem_cen = 1'b0;
                         mem_wen = 1'b0;
                         mem_addr = i_proc_addr;
+                        output_data = cache[line_hit][(i_proc_addr[3:2] - base[line_hit]) * BIT_W +: BIT_W];
                     end
-
-                    
-                    output_data = i_mem_rdata[i_proc_addr[3:2] * BIT_W +: BIT_W];
+                    else begin  // !i_proc_cen
+                        cache_data_nxt = cache[vacant];
+                        proc_stall = i_mem_stall;
+                        cache_finish = !i_mem_stall;
+                        mem_cen = cache_finish ? 1'b0 : 1'b1;
+                        mem_wen = 1'b0;
+                        mem_addr = i_proc_addr;
+                        output_data = 32'bx;
+                    end
                 end
                 else begin
                     cache_finish = !i_mem_stall;
