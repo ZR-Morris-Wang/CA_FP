@@ -939,7 +939,7 @@ module Cache#(
     reg [LINE_W - 1:0] cache_data_nxt;
 
     // reg [27:0] tag                   // incoming tag 可以直接從 i_proc_addr 切
-    // reg [1:0] block_offset           // incoming offset 可以直接從 i_proc_addr 切
+    reg [1:0] block_offset;           // incoming offset 可以直接從 i_proc_addr 切
 
     reg full;
     reg hit;
@@ -989,7 +989,7 @@ module Cache#(
 
      //decide state
         casex ({i_proc_cen, i_proc_wen, i_mem_stall, i_proc_finish})
-            {1'b1, 1'b0, 1'b0, 1'bx}: begin //read
+            {1'b1, 1'b0, 1'bx, 1'bx}: begin //read
                 case ({hit, full})
                     {Miss, !Full}: begin
                         state_nxt = ReadMissNot;
@@ -1008,7 +1008,7 @@ module Cache#(
                     end
                 endcase
             end
-            {1'b1, 1'b1, 1'b0, 1'b0}: begin //write
+            {1'b1, 1'b1, 1'bx, 1'b0}: begin //write
                 case ({hit, full})
                     {Miss, !Full}: begin
                         state_nxt = WriteMissNot;
@@ -1027,17 +1027,17 @@ module Cache#(
                     end
                 endcase
             end
-            {1'b0, 1'b0, 1'b0, 1'bx}: begin //neither send nor write
+            {1'b0, 1'b0, 1'bx, 1'bx}: begin //neither send nor write
                 state_nxt = Wait;
             end
-            {1'b1, 1'b1, 1'b0, 1'b1}: begin
-                state_nxt = Wait;
-            end
-            {1'bx, 1'bx, 1'b1, 1'bx}:begin //stalled by memory
-                state_nxt = state;
-            end
+            // {1'b1, 1'b1, 1'b0, 1'b1}: begin
+            //     state_nxt = Wait;
+            // end
+            // {1'bx, 1'bx, 1'b1, 1'bx}:begin //stalled by memory
+            //     state_nxt = state;
+            // end
             default: begin
-                state_nxt = state; 
+                state_nxt = state;
             end
         endcase
     end
@@ -1051,10 +1051,12 @@ module Cache#(
 
         case (state)
             ReadMissNot: begin
+                block_offset = i_proc_addr[3:2];
                 mem_cen = 1'b1;
                 mem_wen = 1'b0;
                 mem_addr = i_proc_addr[ADDR_W - 1:4] << 4;
-                cache_data_nxt = {1'b0, 1'b1, i_proc_addr[3:2], i_mem_rdata};
+                cache_data_nxt[LINE_W - 1 : LINE_W - 30] = {1'b0, 1'b1,i_proc_addr[ADDR_W - 1:4]};
+                cache_data_nxt[(ADDR_W * (block_offset + 1) -1) : (ADDR_W * block_offset)] = i_mem_rdata;
                 proc_stall = i_mem_stall;
                 output_data = i_mem_rdata[i_proc_addr[3:2] * BIT_W +: BIT_W];
             end
