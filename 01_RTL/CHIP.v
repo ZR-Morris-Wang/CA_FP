@@ -1055,8 +1055,7 @@ module Cache#(
                 mem_cen = 1'b1;
                 mem_wen = 1'b0;
                 mem_addr = i_proc_addr[ADDR_W - 1:4] << 4;
-                cache_data_nxt[LINE_W - 1 : LINE_W - 30] = {1'b0, 1'b1,i_proc_addr[ADDR_W - 1:4]};
-                cache_data_nxt[(ADDR_W * (block_offset + 1) -1) : (ADDR_W * block_offset)] = i_mem_rdata;
+                cache_data_nxt = {1'b0, 1'b1, i_proc_addr[ADDR_W - 1:4], i_mem_rdata};
                 proc_stall = i_mem_stall;
                 output_data = i_mem_rdata[i_proc_addr[3:2] * BIT_W +: BIT_W];
             end
