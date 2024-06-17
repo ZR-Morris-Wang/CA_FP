@@ -985,7 +985,7 @@ module Cache#(
     always @ (*) begin      // get hit, full and states
         if(i_proc_cen || i_proc_wen) begin
             for (i = 0; i < LINE_NUM; i = i + 1) begin
-                hit = ((cache [i][LINE_W - 3:LINE_W - 30] === i_proc_addr[BIT_W - 1:4]) && (cache[i][LINE_W - 2] === 1)) ? (Hit || hit) : (Miss || hit);
+                hit = ((cache[i][LINE_W - 3:LINE_W - 30] === i_proc_addr[BIT_W - 1:4]) && (cache[i][LINE_W - 2] === 1) && (i_proc_addr[3:2] >= base[i])) ? (Hit || hit) : (Miss || hit);
                 full = (cache[i][LINE_W - 2] && full) ? Full : !Full;
             end
         end
